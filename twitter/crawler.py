@@ -351,6 +351,8 @@ def scheduler():
 
     for task in scheduleTask:
         delay = task['startTime'] - time.time()
+        if delay < 0:
+            delay = 0
         processQueue.enter(delay=delay, priority=0, action= task['function'], kwargs=task['kwargs'])
 
 
