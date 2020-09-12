@@ -358,7 +358,8 @@ if __name__ == '__main__':
         scheduler()
         processQueue.run()
         if lastSave() + timedelta(hours=1) < datetime.now():
-            print(f'tweetId : {len(processTweetsIds)} , userId : {len(processUserIds)}')
+            with open('crawler.log','a') as f:
+                f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}')
             saveState()
 
 
