@@ -357,7 +357,7 @@ if __name__ == '__main__':
     while len(processTweetsIds) < 1000000:
         scheduler()
         processQueue.run()
-        if lastSave() + timedelta(hours=1) < datetime.now():
+        if lastSave + timedelta(hours=1) < datetime.now():
             with open('crawler.log','a') as f:
                 f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}')
             saveState()
