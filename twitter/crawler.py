@@ -42,11 +42,9 @@ def saveState():
     )
 
     db = client[os.getenv('authSource')]
-    for col in db.list_collection_names():
-        db[col].drop()
 
-    db.rawUsers.insert_many(usersRecords)
-    db.rawTweets.insert_many(tweetsRecord)
+    # db.rawUsers.insert_many(usersRecords)
+    # db.rawTweets.insert_many(tweetsRecord)
 
     usersRecords.clear()
     tweetsRecord.clear()
@@ -68,7 +66,7 @@ def createTasks(**kwargs):
 
     if kwargs['function'] == 'searchTweet':
         taskQueue.append({
-            'function' : searchTweet,
+            'function' : 'searchTweet',
             'kwargs' : {
                 'maxId' : kwargs['maxId'],
                 'mention' : kwargs['mention']
@@ -76,7 +74,7 @@ def createTasks(**kwargs):
         })
     elif kwargs['function'] == 'followerList':
         taskQueue.append({
-            'function' : followerList,
+            'function' : 'followerList',
             'kwargs' : {
                 'cursor' : kwargs['cursor'],
                 'userId' : kwargs['userId']
@@ -84,7 +82,7 @@ def createTasks(**kwargs):
         })
     elif kwargs['function'] == 'retrieveTimelineStatus':
         taskQueue.append({
-        'function' : retrieveTimelineStatus,
+        'function' : 'retrieveTimelineStatus',
         'kwargs' : {
             'userId' : kwargs['userId'],
             'maxId' : kwargs['maxId']
@@ -269,7 +267,7 @@ def initTask():
     global taskQueue
     for name in screenNames:
         taskQueue.append({
-            'function' : searchTweet,
+            'function' : 'searchTweet',
             'kwargs' : {
                 'mention' : name,
                 'maxId' : -1
@@ -298,22 +296,27 @@ def scheduler():
     queueUserIds.clear()
 
     scheduleTask = list()
+    deleteTask = list()
 
-    for task in taskQueue:
+    for i in range(len(taskQueue)):
+        task = dict(taskQueue[i])
+        function = None
         for api in apis:
             if api[task['function'].__name__+'Ocupy']:
                 continue
 
-            if task['function'] == searchTweet:
+            if task['function'] == 'searchTweet':
+                function = searchTweet
                 if api['searchRequestLeft'] > 0:
                     minimumWaitingTime = time.time()
                     chosenApi = api
 
-                elif api['searchResetTime'] < minimumWaitingTime:
+                elif api['searchResetTime'] < 'minimumWaitingTime':
                     minimumWaitingTime = api['searchResetTime']
                     chosenApi = api
 
-            elif task['function'] == followerList:
+            elif task['function'] == 'followerList':
+                function = followerList
                 if api['followerRequestLeft'] > 0:
                     minimumWaitingTime = time.time()
                     chosenApi = api
@@ -322,7 +325,8 @@ def scheduler():
                     minimumWaitingTime = api['followerResetTime']
                     chosenApi = api
 
-            elif task['function'] == retrieveTimelineStatus:
+            elif task['function'] == 'retrieveTimelineStatus':
+                function = retrieveTimelineStatus
                 if api['userTimelineLeft'] > 0:
                     minimumWaitingTime = time.time()
                     chosenApi = api
@@ -334,17 +338,21 @@ def scheduler():
         if chosenApi is None:
             continue
 
+        chosenApi[task['function']+'Ocupy'] = True
         task['kwargs']['api'] = chosenApi
-        chosenApi[task['function'].__name__+'Ocupy'] = True
-        delay = minimumWaitingTime - time.time()
-        if delay <= 0:
-            delay = 0
-        scheduleTask.append(task)
+        task['startTime'] = minimumWaitingTime
+        task['function'] = function
 
-        processQueue.enter(delay=delay, priority=0, action=task['function'], kwargs=task['kwargs'])
+        scheduleTask.append(task)
+        deleteTask.append(taskQueue[i])
+
+    for task in deleteTask:
+        taskQueue.remove(task)
 
     for task in scheduleTask:
-        taskQueue.remove(task)
+        delay = task['startTime'] - time.time()
+        processQueue.enter(delay=delay, priority=0, action= task['function'], kwargs=task['kwargs'])
+
 
 if __name__ == '__main__':
     screenNames = list()
@@ -359,7 +367,8 @@ if __name__ == '__main__':
         processQueue.run()
         if lastSave + timedelta(hours=1) < datetime.now():
             with open('crawler.log','a') as f:
-                f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}')
+                f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}, tasks : {len(taskQueue)}')
             saveState()
+            lastSave = datetime.now()
 
 
