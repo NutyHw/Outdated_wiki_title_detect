@@ -282,8 +282,6 @@ def scheduler():
     global taskQueue
     global processQueue
     
-    minimumWaitingTime = time.time() * 2
-    chosenApi = None
 
     for api in apis:
         checkRateLimit(api)
@@ -299,10 +297,12 @@ def scheduler():
     deleteTask = list()
 
     for i in range(len(taskQueue)):
+        minimumWaitingTime = time.time() * 2
         task = dict(taskQueue[i])
+        chosenApi = None
         function = None
         for api in apis:
-            if api[task['function'].__name__+'Ocupy']:
+            if api[task['function']+'Ocupy']:
                 continue
 
             if task['function'] == 'searchTweet':
@@ -365,7 +365,7 @@ if __name__ == '__main__':
     while len(processTweetsIds) < 1000000:
         scheduler()
         processQueue.run()
-        if lastSave + timedelta(hours=1) < datetime.now():
+        if lastSave + timedelta(minutes=5) < datetime.now():
             with open('crawler.log','a') as f:
                 f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}, tasks : {len(taskQueue)}')
             saveState()
