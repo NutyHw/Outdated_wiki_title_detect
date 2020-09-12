@@ -354,9 +354,11 @@ if __name__ == '__main__':
 
     lastSave = datetime.now()
     initTask()
-    scheduler()
-    processQueue.run()
-    print(f'tweets : {len(tweetsRecord)}, users : {len(usersRecords)}')
-    saveState()
+    while len(processTweetsIds) < 1000000:
+        scheduler()
+        processQueue.run()
+        if lastSave() + timedelta(hours=1) < datetime.now():
+            print(f'tweetId : {len(processTweetsIds)} , userId : {len(processUserIds)}')
+            saveState()
 
 
