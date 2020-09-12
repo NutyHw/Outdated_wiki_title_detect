@@ -53,7 +53,7 @@ def saveState():
 
     with open('taskQueue.txt','w') as f:
         json.dump(taskQueue,f)
-    with open('processTweetsIds','w') as f:
+    with open('processTweetsIds.txt','w') as f:
         for id in processTweetsIds:
             f.writelines(str(id))
     with open('processUserIds.txt','w') as f:
