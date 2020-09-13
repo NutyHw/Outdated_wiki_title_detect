@@ -284,7 +284,9 @@ def scheduler():
     
 
     for api in apis:
-        checkRateLimit(api)
+        api['followerListOcupy'] = False
+        api['retrieveTimelineStatusOcupy'] = False
+        api['searchTweetOcupy'] = False
 
     for userId in queueUserIds:
         createTasks(function='followerList', userId = userId, cursor=-1)
