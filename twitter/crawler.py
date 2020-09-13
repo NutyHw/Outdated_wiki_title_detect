@@ -383,19 +383,19 @@ if __name__ == '__main__':
     for api in apis:
         checkRateLimit(api)
 
-    loadState()
+    initTask()
 
     while len(processTweetsIds) < 1000000:
         scheduler()
         processQueue.run()
         if lastSave + timedelta(minutes=60) < datetime.now():
             with open('crawler.log','a') as f:
-                f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}, tasks : {len(taskQueue)}')
+                f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}, tasks : {len(taskQueue)}\n')
             saveState()
             lastSave = datetime.now()
 
         if lastCheckRatelimit + timedelta(minutes=15) < datetime.now():
-            api = authenApis('../config/app.json')
+            apis = authenApis('../config/app.json')
             for api in apis:
                 checkRateLimit(api)
             lastCheckRatelimit = datetime.now()
