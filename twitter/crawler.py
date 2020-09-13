@@ -363,7 +363,12 @@ if __name__ == '__main__':
         screenNames = f.read().splitlines()
 
     lastSave = datetime.now()
+    lastCheckRatelimit = datetime.now()
+    
+    for api in apis:
+        checkRateLimit[api]
     initTask()
+
     while len(processTweetsIds) < 1000000:
         scheduler()
         processQueue.run()
@@ -373,4 +378,8 @@ if __name__ == '__main__':
             saveState()
             lastSave = datetime.now()
 
+        if lastCheckRatelimit + timedelta(minutes=15) < datetime.now():
+            for api in apis:
+                checkRateLimit(api)
+            lastCheckRatelimit = datetime.now()
 
