@@ -24,6 +24,19 @@ apis = list()
 taskQueue = list()
 processQueue = sched.scheduler()
 
+def loadState():
+    with open('processTweetsIds.txt') as f:
+        processTweetsIds = set(f.read().splitlines())
+
+    with open('processUserIds.txt') as f:
+        processUserIds = set(f.read().splitlines())
+
+    with open('taskQueue.txt') as f:
+        taskQueue = json.load(f)
+
+    with open('queueUserIds.txt') as f:
+        queueUserIds = f.read().splitlines()
+
 def saveState():
     global processTweetsIds
     global processUserIds
@@ -369,7 +382,8 @@ if __name__ == '__main__':
     
     for api in apis:
         checkRateLimit(api)
-    initTask()
+
+    loadState()
 
     while len(processTweetsIds) < 1000000:
         scheduler()
