@@ -366,7 +366,7 @@ if __name__ == '__main__':
     lastCheckRatelimit = datetime.now()
     
     for api in apis:
-        checkRateLimit[api]
+        checkRateLimit(api)
     initTask()
 
     while len(processTweetsIds) < 1000000:
