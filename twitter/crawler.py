@@ -395,6 +395,7 @@ if __name__ == '__main__':
             lastSave = datetime.now()
 
         if lastCheckRatelimit + timedelta(minutes=15) < datetime.now():
+            api = authenApis('../config/app.json')
             for api in apis:
                 checkRateLimit(api)
             lastCheckRatelimit = datetime.now()
