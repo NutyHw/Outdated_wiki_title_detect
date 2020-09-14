@@ -344,7 +344,7 @@ def scheduler():
                     minimumWaitingTime = time.time()
                     chosenApi = api
 
-                elif api['searchResetTime'] < 'minimumWaitingTime':
+                elif api['searchResetTime'] < minimumWaitingTime:
                     minimumWaitingTime = api['searchResetTime']
                     chosenApi = api
 
@@ -353,6 +353,9 @@ def scheduler():
                 if api['followerRequestLeft'] > 0:
                     minimumWaitingTime = time.time()
                     chosenApi = api
+
+                elif api['followerResetTime'] - time.time() > 15 * 60 * 60:
+                    continue
 
                 elif api['followerResetTime'] < minimumWaitingTime:
                     minimumWaitingTime = api['followerResetTime']
