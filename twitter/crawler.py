@@ -61,8 +61,10 @@ def saveState():
 
     db = client[os.getenv('authSource')]
 
-    db.rawUsers.insert_many(usersRecords)
-    db.rawTweets.insert_many(tweetsRecord)
+    if len(usersRecords) > 0:
+        db.rawUsers.insert_many(usersRecords)
+    if len(tweetsRecord) > 0:
+        db.rawTweets.insert_many(tweetsRecord)
 
     usersRecords.clear()
     tweetsRecord.clear()
@@ -73,13 +75,13 @@ def saveState():
         json.dump(taskQueue,f)
     with open('processTweetsIds.txt','w') as f:
         for id in processTweetsIds:
-            f.writelines(str(id))
+            f.writelines(str(id)+'\n')
     with open('processUserIds.txt','w') as f:
         for id in processTweetsIds:
-            f.writelines(str(id))
+            f.writelines(str(id)+'\n')
     with open('queueUserIds.txt','w') as f:
         for id in queueUserIds:
-            f.writelines(str(id))
+            f.writelines(str(id)+'\n')
 
 def createTasks(**kwargs):
     global processQueue
@@ -318,7 +320,6 @@ def scheduler():
 
     processUserIds = processUserIds.union(set(queueUserIds))
     queueUserIds.clear()
-
     scheduleTask = list()
     deleteTask = list()
 
@@ -383,22 +384,23 @@ def scheduler():
 
 if __name__ == '__main__':
     screenNames = list()
-    apis = authenApis('../config/app.json')
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
 
     lastCheckRatelimit = datetime.now()
     lastSave = datetime.now()
     
+    apis = authenApis('../config/app.json')
     for api in apis:
         checkRateLimit(api)
 
     loadState()
     initTask()
-
     while len(processTweetsIds) < 1000000:
         scheduler()
         if lastSave + timedelta(minutes=30) < datetime.now():
+            with open('crawler.log','a') as f:
+                f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}, tasks : {len(taskQueue)}\n')
             saveState()
 
         if lastCheckRatelimit + timedelta(minutes=10) < datetime.now():
