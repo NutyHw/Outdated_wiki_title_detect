@@ -138,22 +138,19 @@ def authenApis(fpath):
     return apis
 
 def checkRateLimit(api):
-    try:
-        response = api['api'].rate_limit_status()
-        search = response['resources']['search']['/search/tweets']
-        api['searchRequestLeft'] = search['remaining']
-        api['searchResetTime'] = search['reset']
-        
-        follower = response['resources']['followers']['/followers/list']
-        api['followerRequestLeft'] = follower['remaining']
-        api['followerResetTime'] = follower['reset']
+    response = api['api'].rate_limit_status()
+    search = response['resources']['search']['/search/tweets']
+    api['searchRequestLeft'] = search['remaining']
+    api['searchResetTime'] = search['reset']
+    
+    follower = response['resources']['followers']['/followers/list']
+    api['followerRequestLeft'] = follower['remaining']
+    api['followerResetTime'] = follower['reset']
 
 
-        timeline = response['resources']['statuses']['/statuses/user_timeline']
-        api['userTimelineLeft'] = timeline['remaining']
-        api['userTimelineResetTime'] = timeline['reset']
-    except tweepy.TweepError:
-        apis = authenApis('../config/app.json')
+    timeline = response['resources']['statuses']['/statuses/user_timeline']
+    api['userTimelineLeft'] = timeline['remaining']
+    api['userTimelineResetTime'] = timeline['reset']
 
 def searchTweet(mention,api, maxId = -1):
     global processTweetsIds
@@ -166,54 +163,57 @@ def searchTweet(mention,api, maxId = -1):
     users = list()
     isExhaust = False
 
-    while api['searchRequestLeft'] > 0 and not isExhaust:
-        isExhaust = True
-        response = api['api'].search(q=mention, lang='th', count = 100, result_type = 'mixed', max_id = maxId, tweet_mode='extended')
-        for tweet in response:
-            tweet = tweet._json
-            if tweet['id'] in processTweetsIds:
-                continue
+    try:
+        while api['searchRequestLeft'] > 0 and not isExhaust:
+            isExhaust = True
+            response = api['api'].search(q=mention, lang='th', count = 100, result_type = 'mixed', max_id = maxId, tweet_mode='extended')
+            for tweet in response:
+                tweet = tweet._json
+                if tweet['id'] in processTweetsIds:
+                    continue
 
-            record = {
-                'created_at' : tweet['created_at'],
-                'user_id' : tweet['user']['id'],
-                'id' : tweet['id'],
-                'full_text' : tweet['full_text'],
-                'hashtags' : tweet['entities']['hashtags'],
-                'user_mentions' : tweet['entities']['user_mentions'],
-                'retweet_count' : tweet['retweet_count'],
-                'retweeted' : tweet['retweeted']
-            }
+                record = {
+                    'created_at' : tweet['created_at'],
+                    'user_id' : tweet['user']['id'],
+                    'id' : tweet['id'],
+                    'full_text' : tweet['full_text'],
+                    'hashtags' : tweet['entities']['hashtags'],
+                    'user_mentions' : tweet['entities']['user_mentions'],
+                    'retweet_count' : tweet['retweet_count'],
+                    'retweeted' : tweet['retweeted']
+                }
 
-            if 'retweeted_status' in tweet:
-                record['full_text'] = tweet['retweeted_status']['full_text']
-                
-            tweetsRecord.append(record)
+                if 'retweeted_status' in tweet:
+                    record['full_text'] = tweet['retweeted_status']['full_text']
+                    
+                tweetsRecord.append(record)
 
-            processTweetsIds = processTweetsIds.union({tweet['id']})
+                processTweetsIds = processTweetsIds.union({tweet['id']})
 
-            if tweet['id'] < maxId:
-                isExhaust = False
-                maxId = tweet['id']
+                if tweet['id'] < maxId:
+                    isExhaust = False
+                    maxId = tweet['id']
 
-            if tweet['user']['id'] in processUserIds:
-                continue
+                if tweet['user']['id'] in processUserIds:
+                    continue
 
-            usersRecords.append({
-                'id' : tweet['user']['id'],
-                'name' : tweet['user']['name'],
-                'screen_name' : tweet['user']['screen_name'],
-                'location' : tweet['user']['location'],
-                'followers_count' : tweet['user']['followers_count'],
-                'friends_count' : tweet['user']['friends_count'],
-                'statuses_count' : tweet['user']['statuses_count'],
-                'created_at' : tweet['user']['created_at']
-            })
+                usersRecords.append({
+                    'id' : tweet['user']['id'],
+                    'name' : tweet['user']['name'],
+                    'screen_name' : tweet['user']['screen_name'],
+                    'location' : tweet['user']['location'],
+                    'followers_count' : tweet['user']['followers_count'],
+                    'friends_count' : tweet['user']['friends_count'],
+                    'statuses_count' : tweet['user']['statuses_count'],
+                    'created_at' : tweet['user']['created_at']
+                })
 
-            queueUserIds = queueUserIds.union({tweet['user']['id']})
+                queueUserIds = queueUserIds.union({tweet['user']['id']})
 
-        api['searchRequestLeft'] -= 1
-    
+            api['searchRequestLeft'] -= 1
+    except tweepy.RateLimitError:
+        checkRateLimit(api)
+        
     if not isExhaust:
         createTasks(function='searchTweet', maxId=maxId, mention=mention)
 
@@ -223,41 +223,44 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
 
     isExhaust = False
 
-    while api['userTimelineLeft'] > 0 and not isExhaust:
-        isExhaust = True
-        response = None
+    try:
+        while api['userTimelineLeft'] > 0 and not isExhaust:
+            isExhaust = True
+            response = None
 
-        if maxId == -1:
-            response = api['api'].user_timeline(id=userId, count=200, tweet_mode='extended')
-        else:
-            response = api['api'].user_timeline(id=userId, max_id=maxId, count=200, tweet_mode='extended')
+            if maxId == -1:
+                response = api['api'].user_timeline(id=userId, count=200, tweet_mode='extended')
+            else:
+                response = api['api'].user_timeline(id=userId, max_id=maxId, count=200, tweet_mode='extended')
 
-        for tweet in response:
-            tweet = tweet._json
-            if tweet['id'] in processTweetsIds:
-                continue
+            for tweet in response:
+                tweet = tweet._json
+                if tweet['id'] in processTweetsIds:
+                    continue
 
-            record = {
-                'created_at' : tweet['created_at'],
-                'user_id' : tweet['user']['id'],
-                'id' : tweet['id'],
-                'full_text' : tweet['full_text'],
-                'hashtags' : tweet['entities']['hashtags'],
-                'user_mentions' : tweet['entities']['user_mentions'],
-                'retweet_count' : tweet['retweet_count'],
-                'retweeted' : tweet['retweeted']
-            }
+                record = {
+                    'created_at' : tweet['created_at'],
+                    'user_id' : tweet['user']['id'],
+                    'id' : tweet['id'],
+                    'full_text' : tweet['full_text'],
+                    'hashtags' : tweet['entities']['hashtags'],
+                    'user_mentions' : tweet['entities']['user_mentions'],
+                    'retweet_count' : tweet['retweet_count'],
+                    'retweeted' : tweet['retweeted']
+                }
 
-            if 'retweeted_status' in tweet:
-                record['full_text'] = tweet['retweeted_status']['full_text']
-                
-            tweetsRecord.append(record)
+                if 'retweeted_status' in tweet:
+                    record['full_text'] = tweet['retweeted_status']['full_text']
+                    
+                tweetsRecord.append(record)
 
-            if tweet['id'] < maxId:
-                maxId = tweet['id']
-                isExhaust = False
+                if tweet['id'] < maxId:
+                    maxId = tweet['id']
+                    isExhaust = False
 
-        api['userTimelineLeft'] -= 1
+            api['userTimelineLeft'] -= 1
+    except tweepy.RateLimitError:
+        checkRateLimit(api)
 
     if not isExhaust:
         createTasks(userId=userId, maxId=maxId, function='retrieveTimelineStatus')
@@ -265,25 +268,28 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
 def followerList(userId, api, cursor=-1):
     global processUserIds
 
-    while cursor != 0 and api['followerRequestLeft'] > 0:
-        response = api['api'].followers(id = userId, cursor=cursor, count = 200)
-        for user in response[0]:
-            user = user._json
-            if user['id'] in processUserIds:
-                continue
+    try:
+        while cursor != 0 and api['followerRequestLeft'] > 0:
+            response = api['api'].followers(id = userId, cursor=cursor, count = 200)
+            for user in response[0]:
+                user = user._json
+                if user['id'] in processUserIds:
+                    continue
 
-            usersRecords.append({
-                'id' : user['id'],
-                'name' : user['name'],
-                'screen_name' : user['screen_name'],
-                'location' : user['location'],
-                'followers_count' : user['followers_count'],
-                'friends_count' : user['friends_count'],
-                'statuses_count' : user['statuses_count'],
-                'created_at' : user['created_at']
-            })
-        api['followerRequestLeft'] -= 1
-        cursor = response[1][1]
+                usersRecords.append({
+                    'id' : user['id'],
+                    'name' : user['name'],
+                    'screen_name' : user['screen_name'],
+                    'location' : user['location'],
+                    'followers_count' : user['followers_count'],
+                    'friends_count' : user['friends_count'],
+                    'statuses_count' : user['statuses_count'],
+                    'created_at' : user['created_at']
+                })
+            api['followerRequestLeft'] -= 1
+            cursor = response[1][1]
+    except tweepy.RateLimitError:
+        checkRateLimit(api)
 
     if cursor != 0:
         createTasks(userId=userId, cursor=cursor,function='followerList')
