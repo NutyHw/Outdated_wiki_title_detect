@@ -20,22 +20,27 @@ usersRecords = list()
 screenNames = list()
 apis = list()
 
-
 taskQueue = list()
 processQueue = sched.scheduler()
 
 def loadState():
-    with open('processTweetsIds.txt') as f:
-        processTweetsIds = set(f.read().splitlines())
+    global processTweetsIds
+    global processUserIds
+    global taskQueue
+    global queueUserIds
 
-    with open('processUserIds.txt') as f:
-        processUserIds = set(f.read().splitlines())
+    client = MongoClient(
+        host=os.getenv('host'),
+        port=int(os.getenv('port')),
+        username=os.getenv('username'),
+        password=os.getenv('password'),
+        authSource=os.getenv('authSource'),
+        authMechanism=os.getenv('authMechanism')
+    )
 
-    with open('taskQueue.txt') as f:
-        taskQueue = json.load(f)
-
-    with open('queueUserIds.txt') as f:
-        queueUserIds = f.read().splitlines()
+    db = client[os.getenv('authSource')]
+    processTweetsIds = db.rawTweets.distinct('id')
+    processUserIds = db.rawUsers.distinct('id')
 
 def saveState():
     global processTweetsIds
@@ -56,12 +61,14 @@ def saveState():
 
     db = client[os.getenv('authSource')]
 
-    # db.rawUsers.insert_many(usersRecords)
-    # db.rawTweets.insert_many(tweetsRecord)
+    db.rawUsers.insert_many(usersRecords)
+    db.rawTweets.insert_many(tweetsRecord)
 
     usersRecords.clear()
     tweetsRecord.clear()
 
+    with open('crawler.log','a') as f:
+        f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}, tasks : {len(taskQueue)}\n')
     with open('taskQueue.txt','w') as f:
         json.dump(taskQueue,f)
     with open('processTweetsIds.txt','w') as f:
@@ -102,21 +109,6 @@ def createTasks(**kwargs):
         }})
 
         
-def checkRateLimit(api):
-    response = api['api'].rate_limit_status()
-
-    search = response['resources']['search']['/search/tweets']
-    api['searchRequestLeft'] = search['remaining']
-    api['searchResetTime'] = search['reset']
-    
-    follower = response['resources']['followers']['/followers/list']
-    api['followerRequestLeft'] = follower['remaining']
-    api['followerResetTime'] = follower['reset']
-
-
-    timeline = response['resources']['statuses']['/statuses/user_timeline']
-    api['userTimelineLeft'] = timeline['remaining']
-    api['userTimelineResetTime'] = timeline['reset']
 
 def authenApis(fpath):
     config = None
@@ -142,6 +134,24 @@ def authenApis(fpath):
         })
 
     return apis
+
+def checkRateLimit(api):
+    try:
+        response = api['api'].rate_limit_status()
+        search = response['resources']['search']['/search/tweets']
+        api['searchRequestLeft'] = search['remaining']
+        api['searchResetTime'] = search['reset']
+        
+        follower = response['resources']['followers']['/followers/list']
+        api['followerRequestLeft'] = follower['remaining']
+        api['followerResetTime'] = follower['reset']
+
+
+        timeline = response['resources']['statuses']['/statuses/user_timeline']
+        api['userTimelineLeft'] = timeline['remaining']
+        api['userTimelineResetTime'] = timeline['reset']
+    except tweepy.TweepError:
+        apis = authenApis('../config/app.json')
 
 def searchTweet(mention,api, maxId = -1):
     global processTweetsIds
@@ -301,6 +311,7 @@ def scheduler():
         api['retrieveTimelineStatusOcupy'] = False
         api['searchTweetOcupy'] = False
 
+        checkRateLimit[api]
     for userId in queueUserIds:
         createTasks(function='followerList', userId = userId, cursor=-1)
         createTasks(function='retrieveTimelineStatus', userId = userId, maxId = -1)
@@ -370,33 +381,30 @@ def scheduler():
             delay = 0
         processQueue.enter(delay=delay, priority=0, action= task['function'], kwargs=task['kwargs'])
 
-
 if __name__ == '__main__':
     screenNames = list()
     apis = authenApis('../config/app.json')
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
 
-    lastSave = datetime.now()
     lastCheckRatelimit = datetime.now()
+    lastSave = datetime.now()
     
     for api in apis:
         checkRateLimit(api)
 
+    loadState()
     initTask()
 
     while len(processTweetsIds) < 1000000:
         scheduler()
-        processQueue.run()
-        if lastSave + timedelta(minutes=60) < datetime.now():
-            with open('crawler.log','a') as f:
-                f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}, tasks : {len(taskQueue)}\n')
+        if lastSave + timedelta(minutes=30) < datetime.now():
             saveState()
-            lastSave = datetime.now()
 
-        if lastCheckRatelimit + timedelta(minutes=15) < datetime.now():
+        if lastCheckRatelimit + timedelta(minutes=10) < datetime.now():
             apis = authenApis('../config/app.json')
             for api in apis:
                 checkRateLimit(api)
             lastCheckRatelimit = datetime.now()
-
+            lastSave = datetime.now()
+        processQueue.run()
