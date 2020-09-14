@@ -65,20 +65,27 @@ if __name__ == '__main__':
         if not endTime or res[hashtag][-1] > endTime:
             endTime = res[hashtag][-1]
 
-    print(startTime)
-    print(endTime)
     data['hashtags'] = list(res.keys())
+
+    keys = dict()
 
     while startTime <= endTime:
         rows = list()
         for hashtag in res.keys():
             allTimes = res[hashtag]
             counter = 0
-            for time in allTimes:
-                if time >= startTime and time < startTime + timedelta(hours=1):
+            start = 0
+            if hashtag in keys.keys():
+                start = keys[hashtag]
+
+            for i in range(start,len(allTimes)):
+                time = allTimes[i]
+                if time >= startTime and time < startTime + timedelta(days=1):
                     counter += 1
                 else:
+                    keys[hashtag] = i
                     rows.append(counter)
+
         data[startTime.strftime("%Y-%m-%d %H:%M:%S")] = rows
         startTime += timedelta(hours=1)
     df = pd.DataFrame(data)
