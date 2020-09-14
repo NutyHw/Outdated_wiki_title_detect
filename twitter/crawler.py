@@ -25,17 +25,25 @@ taskQueue = list()
 processQueue = sched.scheduler()
 
 def loadState():
-    with open('processTweetsIds.txt') as f:
-        processTweetsIds = set(f.read().splitlines())
+    global processTweetsIds
+    global processUserIds
+    global taskQueue
+    global queueUserIds
 
-    with open('processUserIds.txt') as f:
-        processUserIds = set(f.read().splitlines())
+    #with open('taskQueue.txt') as f:
+    #    taskQueue = json.load(f)
 
-    with open('taskQueue.txt') as f:
-        taskQueue = json.load(f)
-
-    with open('queueUserIds.txt') as f:
-        queueUserIds = f.read().splitlines()
+    client = MongoClient(
+        host=os.getenv('host'),
+        port=int(os.getenv('port')),
+        username=os.getenv('username'),
+        password=os.getenv('password'),
+        authSource=os.getenv('authSource'),
+        authMechanism=os.getenv('authMechanism')
+    )
+    db = client[os.getenv('authSource')]
+    processUserIds = set(db.rawUsers.distinct('id'))
+    processTweetsIds = set(db.rawTweets.distinct('id'))
 
 def saveState():
     global processTweetsIds
@@ -56,8 +64,10 @@ def saveState():
 
     db = client[os.getenv('authSource')]
 
-    # db.rawUsers.insert_many(usersRecords)
-    # db.rawTweets.insert_many(tweetsRecord)
+    if len(usersRecords) > 0:
+        db.rawUsers.insert_many(usersRecords)
+    if len(tweetsRecord) > 0:
+        db.rawTweets.insert_many(tweetsRecord)
 
     usersRecords.clear()
     tweetsRecord.clear()
@@ -66,13 +76,13 @@ def saveState():
         json.dump(taskQueue,f)
     with open('processTweetsIds.txt','w') as f:
         for id in processTweetsIds:
-            f.writelines(str(id))
+            f.writelines(str(id)+'\n')
     with open('processUserIds.txt','w') as f:
         for id in processTweetsIds:
-            f.writelines(str(id))
+            f.writelines(str(id)+'\n')
     with open('queueUserIds.txt','w') as f:
         for id in queueUserIds:
-            f.writelines(str(id))
+            f.writelines(str(id)+'\n')
 
 def createTasks(**kwargs):
     global processQueue
@@ -307,7 +317,6 @@ def scheduler():
 
     processUserIds = processUserIds.union(set(queueUserIds))
     queueUserIds.clear()
-
     scheduleTask = list()
     deleteTask = list()
 
@@ -373,21 +382,20 @@ def scheduler():
 
 if __name__ == '__main__':
     screenNames = list()
-    apis = authenApis('../config/app.json')
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
 
     lastSave = datetime.now()
     lastCheckRatelimit = datetime.now()
     
+    apis = authenApis('../config/app.json')
     for api in apis:
         checkRateLimit(api)
 
+    loadState()
     initTask()
-
     while len(processTweetsIds) < 1000000:
         scheduler()
-        processQueue.run()
         if lastSave + timedelta(minutes=60) < datetime.now():
             with open('crawler.log','a') as f:
                 f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}, tasks : {len(taskQueue)}\n')
@@ -400,3 +408,4 @@ if __name__ == '__main__':
                 checkRateLimit(api)
             lastCheckRatelimit = datetime.now()
 
+        processQueue.run()
