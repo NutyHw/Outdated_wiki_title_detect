@@ -24,7 +24,7 @@ apis = list()
 taskQueue = list()
 processQueue = sched.scheduler()
 
-lock = threading.Lock()
+lock = threading.RLock()
 
 def loadState():
     global processTweetsIds
@@ -141,7 +141,6 @@ def authenApis(fpath):
     return apis
 
 def checkRateLimit(api):
-    lock.acquire()
     response = api['api'].rate_limit_status()
     search = response['resources']['search']['/search/tweets']
     api['searchRequestLeft'] = search['remaining']
@@ -155,7 +154,6 @@ def checkRateLimit(api):
     timeline = response['resources']['statuses']['/statuses/user_timeline']
     api['userTimelineLeft'] = timeline['remaining']
     api['userTimelineResetTime'] = timeline['reset']
-    lock.release()
 
 def searchTweet(mention,api, maxId = -1):
     global processTweetsIds
@@ -168,6 +166,7 @@ def searchTweet(mention,api, maxId = -1):
     users = list()
     isExhaust = False
 
+    lock.acquire()
     try:
         while api['searchRequestLeft'] > 0 and not isExhaust:
             isExhaust = True
@@ -217,6 +216,7 @@ def searchTweet(mention,api, maxId = -1):
             api['searchRequestLeft'] -= 1
     except tweepy.RateLimitError:
         checkRateLimit(api)
+    lock.release()
         
     if not isExhaust:
         createTasks(function='searchTweet', maxId=maxId, mention=mention)
@@ -227,6 +227,7 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
 
     isExhaust = False
 
+    lock.acquire()
     try:
         while api['userTimelineLeft'] > 0 and not isExhaust:
             response = None
@@ -265,12 +266,14 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
             api['userTimelineLeft'] -= 1
     except tweepy.RateLimitError:
         checkRateLimit(api)
+    lock.release()
 
     if not isExhaust:
         createTasks(userId=userId, maxId=maxId, function='retrieveTimelineStatus')
 
 def followerList(userId, api, cursor=-1):
     global processUserIds
+    lock.acquire()
     try:
         while cursor != 0 and api['followerRequestLeft'] > 0:
             response = api['api'].followers(id = userId, cursor=cursor, count = 200)
@@ -294,6 +297,7 @@ def followerList(userId, api, cursor=-1):
             cursor = response[1][1]
     except tweepy.RateLimitError:
         checkRateLimit(api)
+    lock.release()
 
     if cursor != 0:
         createTasks(userId=userId, cursor=cursor,function='followerList')
