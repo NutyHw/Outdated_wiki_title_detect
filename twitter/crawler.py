@@ -116,16 +116,18 @@ def createTasks(**kwargs):
         }})
 
 def authenApis(fpath):
+    global apis
     config = None
-    apis = list()
+    newApis = list()
 
+    lock.acquire()
     with open(fpath) as f:
         config = json.load(f)
 
     for app in config:
         auth = tweepy.OAuthHandler(config[app]['API_KEY'],config[app]['API_SECRET'])
         auth.set_access_token(config[app]['ACCESS_TOKEN'],config[app]['ACCESS_SECRET'])
-        apis.append({
+        newApis.append({
             'api' : tweepy.API(auth),
             'searchResetTime' : None,
             'searchRequestLeft' : None,
@@ -137,10 +139,12 @@ def authenApis(fpath):
             'userTimelineLeft' : None,
             'retrieveTimelineStatusOcupy' : False
         })
-
-    return apis
+    
+    apis = newApis
+    lock.release()
 
 def checkRateLimit(api):
+    lock.acquire()
     response = api['api'].rate_limit_status()
     search = response['resources']['search']['/search/tweets']
     api['searchRequestLeft'] = search['remaining']
@@ -154,6 +158,7 @@ def checkRateLimit(api):
     timeline = response['resources']['statuses']['/statuses/user_timeline']
     api['userTimelineLeft'] = timeline['remaining']
     api['userTimelineResetTime'] = timeline['reset']
+    lock.release()
 
 def searchTweet(mention,api, maxId = -1):
     global processTweetsIds
@@ -411,25 +416,21 @@ if __name__ == '__main__':
     lastCheckRatelimit = datetime.now()
     lastSave = datetime.now()
     
-    apis = authenApis('../config/app.json')
+    authenApis('../config/app.json')
     for api in apis:
         checkRateLimit(api)
 
     while len(processTweetsIds) < 1000000:
-        if threading.activeCount() == 0:
+        if threading.activeCount() == 1:
             scheduler()
             threading.Thread(target=processQueue.run)
 
-        if lastSave + timedelta(minutes=60) < datetime.now():
-            with open('crawler.log','a') as f:
-                f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}, tasks : {len(taskQueue)}\n')
-            saveState()
-
         if lastCheckRatelimit + timedelta(minutes=15) < datetime.now():
-            lock.acquire()
-            apis = authenApis('../config/app.json')
+            authenApis('../config/app.json')
             for api in apis:
                 checkRateLimit(api)
-            lock.release()
-            lastCheckRatelimit = datetime.now()
+
+        if lastSave + timedelta(hours=1) < datetime.now():
+            saveState()
             lastSave = datetime.now()
+            
