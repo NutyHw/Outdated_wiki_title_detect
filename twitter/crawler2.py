@@ -41,7 +41,7 @@ def saveState():
 
     lock.acquire()
     with open('crawler.log','a') as f:
-        f.write('tweetsRecord : {len(tweetsRecord)}, usersRecords : {len(usersRecords)}\n')
+        f.write(f'tweetsRecord : {len(tweetsRecord)}, usersRecords : {len(usersRecords)}\n')
 
     with open('taskQueue.txt','w') as f:
         json.dump(taskQueue,f)
@@ -307,6 +307,8 @@ def initTask():
 
 def scheduler():
     global taskQueue
+    global apis
+    global queueUserIds
 
     lastCheckRatelimit = datetime.now()
     lastSave = datetime.now()
@@ -314,12 +316,27 @@ def scheduler():
     while len(taskQueue) > 0:
         deleteTask = list()
 
-        if threading.activeCount() > 8:
+        if threading.activeCount() > 3:
             continue
 
         lock.acquire()
+
+        if lastSave + timedelta(hours=1) < datetime.now():
+            thread = threading.Thread(target=saveState)
+            thread.start()
+            lastSave = datetime.now()
+
+        if lastCheckRatelimit + timedelta(minutes=15) < datetime.now():
+            thread = threading.Thread(target=authenApis, args=('../config/app.json'))
+            thread.start()
+            lastCheckRatelimit = datetime.now()
+
+        for userId in queueUserIds:
+            createTasks(function='followerList', cursor=-1, userId=userId)
+            createTasks(function='retrieveTimelineStatus', maxId=-1, userId=userId)
+
         for i in range(len(taskQueue)):
-            if threading.activeCount() > 8:
+            if threading.activeCount() > 3:
                 break
 
             task = deepcopy(taskQueue[i])
@@ -355,16 +372,6 @@ def scheduler():
             taskQueue.remove(task)
         lock.release()
 
-        print(threading.activeCount())
-        if lastSave + timedelta(hours=1) < datetime.now():
-            thread = threading.Thread(target=saveState)
-            thread.start()
-            lastSave = datetime.now()
-
-        if lastCheckRatelimit + timedelta(minutes=15) < datetime.now():
-            thread = threading.Thread(target=authenApis, args=('../config/app.json'))
-            thread.start()
-            lastCheckRatelimit = datetime.now()
 
 
 if __name__ == '__main__':
