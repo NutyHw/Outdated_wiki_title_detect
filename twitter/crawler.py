@@ -5,6 +5,7 @@ import time
 import sched
 from pymongo import MongoClient
 from dotenv import load_dotenv
+import threading
 import os
 
 load_dotenv(dotenv_path='../config/crawler.env')
@@ -23,6 +24,8 @@ apis = list()
 taskQueue = list()
 processQueue = sched.scheduler()
 
+lock = threading.Lock()
+
 def loadState():
     global processTweetsIds
     global processUserIds
@@ -39,8 +42,8 @@ def loadState():
     )
 
     db = client[os.getenv('authSource')]
-    processTweetsIds = db.rawTweets.distinct('id')
-    processUserIds = db.rawUsers.distinct('id')
+    processTweetsIds = set(db.rawTweets.distinct('id'))
+    processUserIds = set(db.rawUsers.distinct('id'))
 
 def saveState():
     global processTweetsIds
@@ -61,6 +64,7 @@ def saveState():
 
     db = client[os.getenv('authSource')]
 
+    lock.acquire()
     if len(usersRecords) > 0:
         db.rawUsers.insert_many(usersRecords)
     if len(tweetsRecord) > 0:
@@ -70,7 +74,7 @@ def saveState():
     tweetsRecord.clear()
 
     with open('crawler.log','a') as f:
-        f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}, tasks : {len(taskQueue)}\n')
+        f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}, tasks : {len(taskQueue)}')
     with open('taskQueue.txt','w') as f:
         json.dump(taskQueue,f)
     with open('processTweetsIds.txt','w') as f:
@@ -82,6 +86,7 @@ def saveState():
     with open('queueUserIds.txt','w') as f:
         for id in queueUserIds:
             f.writelines(str(id)+'\n')
+    lock.release()
 
 def createTasks(**kwargs):
     global processQueue
@@ -110,8 +115,6 @@ def createTasks(**kwargs):
             'maxId' : kwargs['maxId']
         }})
 
-        
-
 def authenApis(fpath):
     config = None
     apis = list()
@@ -138,6 +141,7 @@ def authenApis(fpath):
     return apis
 
 def checkRateLimit(api):
+    lock.acquire()
     response = api['api'].rate_limit_status()
     search = response['resources']['search']['/search/tweets']
     api['searchRequestLeft'] = search['remaining']
@@ -151,6 +155,7 @@ def checkRateLimit(api):
     timeline = response['resources']['statuses']['/statuses/user_timeline']
     api['userTimelineLeft'] = timeline['remaining']
     api['userTimelineResetTime'] = timeline['reset']
+    lock.release()
 
 def searchTweet(mention,api, maxId = -1):
     global processTweetsIds
@@ -187,7 +192,6 @@ def searchTweet(mention,api, maxId = -1):
                     record['full_text'] = tweet['retweeted_status']['full_text']
                     
                 tweetsRecord.append(record)
-
                 processTweetsIds = processTweetsIds.union({tweet['id']})
 
                 if tweet['id'] < maxId:
@@ -225,7 +229,6 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
 
     try:
         while api['userTimelineLeft'] > 0 and not isExhaust:
-            isExhaust = True
             response = None
 
             if maxId == -1:
@@ -233,6 +236,7 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
             else:
                 response = api['api'].user_timeline(id=userId, max_id=maxId, count=200, tweet_mode='extended')
 
+            isExhaust = True
             for tweet in response:
                 tweet = tweet._json
                 if tweet['id'] in processTweetsIds:
@@ -267,7 +271,6 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
 
 def followerList(userId, api, cursor=-1):
     global processUserIds
-
     try:
         while cursor != 0 and api['followerRequestLeft'] > 0:
             response = api['api'].followers(id = userId, cursor=cursor, count = 200)
@@ -286,6 +289,7 @@ def followerList(userId, api, cursor=-1):
                     'statuses_count' : user['statuses_count'],
                     'created_at' : user['created_at']
                 })
+
             api['followerRequestLeft'] -= 1
             cursor = response[1][1]
     except tweepy.RateLimitError:
@@ -314,6 +318,8 @@ def scheduler():
     global processQueue
     
 
+    scheduleTask = list()
+
     for api in apis:
         api['followerListOcupy'] = False
         api['retrieveTimelineStatusOcupy'] = False
@@ -326,7 +332,6 @@ def scheduler():
 
     processUserIds = processUserIds.union(set(queueUserIds))
     queueUserIds.clear()
-    scheduleTask = list()
     deleteTask = list()
 
     for i in range(len(taskQueue)):
@@ -374,6 +379,9 @@ def scheduler():
         if chosenApi is None:
             continue
 
+        if minimumWaitingTime - time.time() > 15 * 60:
+            continue
+
         chosenApi[task['function']+'Ocupy'] = True
         task['kwargs']['api'] = chosenApi
         task['startTime'] = minimumWaitingTime
@@ -403,19 +411,21 @@ if __name__ == '__main__':
     for api in apis:
         checkRateLimit(api)
 
-    loadState()
-    initTask()
     while len(processTweetsIds) < 1000000:
-        scheduler()
-        if lastSave + timedelta(minutes=30) < datetime.now():
+        if threading.activeCount() == 0:
+            scheduler()
+            threading.Thread(target=processQueue.run)
+
+        if lastSave + timedelta(minutes=60) < datetime.now():
             with open('crawler.log','a') as f:
                 f.writelines(f'userIds : {len(processUserIds)}, tweetIds : {len(processTweetsIds)}, tasks : {len(taskQueue)}\n')
             saveState()
 
-        if lastCheckRatelimit + timedelta(minutes=10) < datetime.now():
+        if lastCheckRatelimit + timedelta(minutes=15) < datetime.now():
+            lock.acquire()
             apis = authenApis('../config/app.json')
             for api in apis:
                 checkRateLimit(api)
+            lock.release()
             lastCheckRatelimit = datetime.now()
             lastSave = datetime.now()
-        processQueue.run()
