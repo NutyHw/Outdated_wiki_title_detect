@@ -105,7 +105,7 @@ def authenApis(fpath):
             'api' : tweepy.API(auth),
             'searchResetTime' : None,
             'searchRequestLeft' : None,
-            'searchLock' : False,
+            'searchTweetLock' : False,
             'followerResetTime' : None,
             'followerRequestLeft' : None, 
             'followerLock' : False,
@@ -307,13 +307,15 @@ def initTask():
 
 def scheduler():
     global taskQueue
-    threads = list()
 
     lastCheckRatelimit = datetime.now()
     lastSave = datetime.now()
 
     while len(taskQueue) > 0:
         deleteTask = list()
+
+        if threading.activeCount() > 8:
+            continue
 
         lock.acquire()
         for i in range(len(taskQueue)):
@@ -325,7 +327,8 @@ def scheduler():
                 if task['function'] == 'searchTweet' and not api['searchTweetLock']:
                     if api['searchRequestLeft'] > 0:
                         task['kwargs']['api'] = api
-                        threads.append(threading.Thread(target=searchTweet, kwargs=task['kwargs']))
+                        thread = threading.Thread(target=searchTweet, kwargs=task['kwargs'])
+                        thread.start()
                         api['searchTweetLock'] = True
                         deleteTask.append(taskQueue[i])
                         break
@@ -333,7 +336,8 @@ def scheduler():
                 elif task['function'] == 'followerList' and not api['followerLock']:
                     if api['followerRequestLeft'] > 0:
                         task['kwargs']['api'] = api
-                        threads.append(threading.Thread(target=followerList, kwargs=task['kwargs']))
+                        thread = threading.Thread(target=followerList, kwargs=task['kwargs'])
+                        thread.start()
                         api['followerLock'] = True
                         deleteTask.append(taskQueue[i])
                         break
@@ -341,7 +345,8 @@ def scheduler():
                 elif task['function'] == 'retrieveTimelineStatus' and not api['userTimelineLock']:
                     if api['userTimelineLeft'] > 0:
                         task['kwargs']['api'] = api
-                        threads.append(threading.Thread(target=retrieveTimelineStatus, kwargs=task['kwargs']))
+                        thread = threading.Thread(target=retrieveTimelineStatus, kwargs=task['kwargs'])
+                        thread.start()
                         api['userTimelineLock'] = True
                         deleteTask.append(taskQueue[i])
                         break
@@ -350,16 +355,15 @@ def scheduler():
             taskQueue.remove(task)
         lock.release()
 
-        if threading.activeCount() > 8:
-            for thread in threads:
-                thread.join()
-
+        print(threading.activeCount())
         if lastSave + timedelta(hours=1) < datetime.now():
-            threads.append(threading.Thread(target=saveState))
+            thread = threading.Thread(target=saveState)
+            thread.start()
             lastSave = datetime.now()
 
         if lastCheckRatelimit + timedelta(minutes=15) < datetime.now():
-            threads.append(threading.Thread(target=authenApis, args=('../config/app.json')))
+            thread = threading.Thread(target=authenApis, args=('../config/app.json'))
+            thread.start()
             lastCheckRatelimit = datetime.now()
 
 
