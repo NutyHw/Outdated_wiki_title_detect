@@ -205,7 +205,7 @@ def searchTweet(mention,api, maxId = -1):
     except tweepy.RateLimitError:
         checkRateLimit(api)
     except tweepy.TweepError:
-        authenApis('../config/app.json')
+        pass
         
     if not isExhaust:
         createTasks(function='searchTweet', maxId=maxId, mention=mention)
@@ -257,7 +257,7 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
     except tweepy.RateLimitError:
         checkRateLimit(api)
     except tweepy.TweepError:
-        authenApis('../config/app.json')
+        pass
 
     if not isExhaust:
         createTasks(userId=userId, maxId=maxId, function='retrieveTimelineStatus')
@@ -272,6 +272,7 @@ def followerList(userId, api, cursor=-1):
                 user = user._json
                 if user['id'] in processUserIds:
                     continue
+                queueUserIds = queueUserIds.union({user['id']})
 
                 usersRecords.append({
                     'id' : user['id'],
@@ -289,7 +290,7 @@ def followerList(userId, api, cursor=-1):
     except tweepy.RateLimitError:
         checkRateLimit(api)
     except tweepy.TweepError:
-        authenApis('../config/app.json')
+        pass
 
     if cursor != 0:
         createTasks(userId=userId, cursor=cursor,function='followerList')
@@ -326,8 +327,8 @@ def scheduler():
             thread.start()
             lastSave = datetime.now()
 
-        if lastCheckRatelimit + timedelta(minutes=15) < datetime.now():
-            thread = threading.Thread(target=authenApis, args=('../config/app.json'))
+        if lastCheckRatelimit + timedelta(minutes=5) < datetime.now():
+            thread = threading.Thread(target=authenApis, args=('../config/app.json',))
             thread.start()
             lastCheckRatelimit = datetime.now()
 
