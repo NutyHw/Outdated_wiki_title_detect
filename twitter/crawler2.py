@@ -115,10 +115,10 @@ def authenApis(fpath):
         })
     lock.acquire()
     apis = authApis
-    lock.release()
 
     for api in apis:
         checkRateLimit(api)
+    lock.release()
 
 def checkRateLimit(api):
     lock.acquire()
@@ -159,7 +159,6 @@ def searchTweet(mention,api, maxId = -1):
 
             for tweet in response:
                 tweet = tweet._json
-                lock.acquire()
                 if tweet['id'] in processTweetsIds:
                     continue
 
@@ -171,7 +170,7 @@ def searchTweet(mention,api, maxId = -1):
                     'hashtags' : tweet['entities']['hashtags'],
                     'user_mentions' : tweet['entities']['user_mentions'],
                     'retweet_count' : tweet['retweet_count'],
-                    'retweeted' : tweet['retweeted']
+                    'retweeted' : hasattr(tweet, 'retweeted_status')
                 }
 
                 if 'retweeted_status' in tweet.keys():
@@ -240,7 +239,7 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
                     'hashtags' : tweet['entities']['hashtags'],
                     'user_mentions' : tweet['entities']['user_mentions'],
                     'retweet_count' : tweet['retweet_count'],
-                    'retweeted' : tweet['retweeted']
+                    'retweeted' : hasattr(tweet, 'retweeted_status')
                 }
 
                 if 'retweeted_status' in tweet:
@@ -264,6 +263,7 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
 
 def followerList(userId, api, cursor=-1):
     global processUserIds
+    global queueUserIds
     try:
         while cursor != 0 and api['followerRequestLeft'] > 0:
             lock.acquire()
