@@ -3,6 +3,7 @@ from dateutil.parser import parse
 from datetime import timedelta
 import os
 import json
+import threading
 from dotenv import load_dotenv
 
 load_dotenv('../config/crawler.env')
@@ -71,5 +72,12 @@ def removeDuplicateUsers(db):
 
 if __name__ == '__main__':
     db = connect()
-    removeDuplicateUsers(db)
-    removeDuplicateTweets(db)
+    thread1 = threading.Thread(target=removeDuplicateUsers,args=(db,))
+    thread2 = threading.Thread(target=removeDuplicateTweets,args=(db,))
+
+    thread1.start()
+    thread2.start()
+
+    thread1.join()
+    thread2.join()
+
