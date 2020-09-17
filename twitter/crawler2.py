@@ -7,6 +7,7 @@ import os
 import sched
 import threading
 from copy import deepcopy
+from dateutil.parser import parse
 
 load_dotenv(dotenv_path='../config/crawler.env')
 
@@ -31,14 +32,19 @@ Locks = {
 def loadState():
     global processTweetsIds
     global processUserIds
-    global taskQueue
 
-    with open('taskQueue.txt') as f:
-        taskQueue = json.load(f)
-    with open('processTweetsIds.txt') as f:
-        processTweetsIds = json.load(f)
-    with open('processUserIds.txt') as f:
-        processUserIds = json.load(f)
+    client = MongoClient(
+        host=os.getenv('host'),
+        port=int(os.getenv('port')),
+        username=os.getenv('username'),
+        password=os.getenv('password'),
+        authSource=os.getenv('authSource'),
+        authMechanism=os.getenv('authMechanism')
+    )
+
+    db = client[os.getenv('authSource')]
+    processTweetsIds = db.preprocessTweets.distinct('id')
+    processUserIds = db.preprocessUsers.distinct('id')
 
 def saveState():
     global processTweetsIds
@@ -188,7 +194,7 @@ def searchTweet(mention,api, maxId = -1):
                         continue
 
                 record = {
-                    'created_at' : tweet['created_at'],
+                    'created_at' : parse(tweet['created_at']),
                     'user_id' : tweet['user']['id'],
                     'id' : tweet['id'],
                     'full_text' : tweet['full_text'],
@@ -222,7 +228,7 @@ def searchTweet(mention,api, maxId = -1):
                         'followers_count' : tweet['user']['followers_count'],
                         'friends_count' : tweet['user']['friends_count'],
                         'statuses_count' : tweet['user']['statuses_count'],
-                        'created_at' : tweet['user']['created_at']
+                        'created_at' : parse(tweet['user']['created_at'])
                     })
 
                 with Locks['queueUserIds']:
@@ -264,7 +270,7 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
                         continue
 
                 record = {
-                    'created_at' : tweet['created_at'],
+                    'created_at' : parse(tweet['created_at']),
                     'user_id' : tweet['user']['id'],
                     'id' : tweet['id'],
                     'full_text' : tweet['full_text'],
@@ -305,7 +311,7 @@ def followerList(userId, api, cursor=-1):
 
             for user in response[0]:
                 user = user._json
-                
+
                 with Locks['processUserIds']:
                     if user['id'] in processUserIds:
                         continue
@@ -322,7 +328,7 @@ def followerList(userId, api, cursor=-1):
                         'followers_count' : user['followers_count'],
                         'friends_count' : user['friends_count'],
                         'statuses_count' : user['statuses_count'],
-                        'created_at' : user['created_at']
+                        'created_at' : parse(user['created_at'])
                     })
 
             with api['mutexLock']:
