@@ -46,6 +46,9 @@ def loadState():
     processTweetsIds = db.preprocessTweets.distinct('id')
     processUserIds = db.preprocessUsers.distinct('id')
 
+    with open('taskQueue.txt') as f:
+        taskQueue = json.load(f)
+
 def saveState():
     global processTweetsIds
     global processUserIds
