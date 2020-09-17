@@ -392,4 +392,5 @@ if __name__ == '__main__':
 
     authenApis('../config/app.json')
     initTask()
+    loadState()
     scheduler()
