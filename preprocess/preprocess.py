@@ -50,6 +50,7 @@ def removeDuplicateTweets(db):
         if record['id'] in ids:
             continue
         ids = ids.union({record['id']})
+        record['created_at'] = parse(record['created_at'])
         preprocessRecords.append(record)
 
     db.preprocessTweets.insert_many(preprocessRecords)
@@ -64,6 +65,7 @@ def removeDuplicateUsers(db):
         if record['id'] in ids:
             continue
         ids = ids.union({record['id']})
+        record['created_at'] = parse(record['created_at'])
         preprocessUsers.append(record)
     db.preprocessUsers.insert_many(preprocessUsers)
 
