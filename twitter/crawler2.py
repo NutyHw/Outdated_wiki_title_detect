@@ -35,7 +35,7 @@ def loadState():
 
     with open('taskQueue.txt') as f:
         taskQueue = json.load(f)
-    with open('processTweetsIds') as f:
+    with open('processTweetsIds.txt') as f:
         processTweetsIds = json.load(f)
     with open('processUserIds.txt') as f:
         processUserIds = json.load(f)
@@ -236,6 +236,8 @@ def searchTweet(mention,api, maxId = -1):
 
     if not isExhaust:
         createTasks(function='searchTweet', maxId=maxId, mention=mention)
+    with api['mutexLock']:
+        api['searchTweetLock'] = False
 
 def retrieveTimelineStatus(userId, api, maxId=-1):
     global tweetsRecord
@@ -290,6 +292,8 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
 
     if not isExhaust:
         createTasks(userId=userId, maxId=maxId, function='retrieveTimelineStatus')
+    with api['mutexLock']:
+        api['userTimelineLock'] = False
 
 def followerList(userId, api, cursor=-1):
     global processUserIds
@@ -331,6 +335,8 @@ def followerList(userId, api, cursor=-1):
 
     if cursor != 0:
         createTasks(userId=userId, cursor=cursor,function='followerList')
+    with api['mutexLock']:
+        api['followerLock'] = False
 
 def initTask():
     global taskQueue
@@ -378,34 +384,34 @@ def scheduler():
                     break
 
                 task = deepcopy(taskQueue[i])
-                Locks['apis'].acquire()
                 for api in apis:
-                    if task['function'] == 'searchTweet' and not api['searchTweetLock']:
-                        if api['searchRequestLeft'] > 0:
-                            task['kwargs']['api'] = api
-                            thread = threading.Thread(target=searchTweet, kwargs=task['kwargs'])
-                            thread.start()
-                            api['searchTweetLock'] = True
-                            deleteTask.append(taskQueue[i])
-                            break
+                    with api['mutexLock']:
+                        if task['function'] == 'searchTweet' and not api['searchTweetLock']:
+                            if api['searchRequestLeft'] > 0:
+                                task['kwargs']['api'] = api
+                                thread = threading.Thread(target=searchTweet, kwargs=task['kwargs'])
+                                thread.start()
+                                api['searchTweetLock'] = True
+                                deleteTask.append(taskQueue[i])
+                                break
 
-                    elif task['function'] == 'followerList' and not api['followerLock']:
-                        if api['followerRequestLeft'] > 0:
-                            task['kwargs']['api'] = api
-                            thread = threading.Thread(target=followerList, kwargs=task['kwargs'])
-                            thread.start()
-                            api['followerLock'] = True
-                            deleteTask.append(taskQueue[i])
-                            break
+                        elif task['function'] == 'followerList' and not api['followerLock']:
+                            if api['followerRequestLeft'] > 0:
+                                task['kwargs']['api'] = api
+                                thread = threading.Thread(target=followerList, kwargs=task['kwargs'])
+                                thread.start()
+                                api['followerLock'] = True
+                                deleteTask.append(taskQueue[i])
+                                break
 
-                    elif task['function'] == 'retrieveTimelineStatus' and not api['userTimelineLock']:
-                        if api['userTimelineLeft'] > 0:
-                            task['kwargs']['api'] = api
-                            thread = threading.Thread(target=retrieveTimelineStatus, kwargs=task['kwargs'])
-                            thread.start()
-                            api['userTimelineLock'] = True
-                            deleteTask.append(taskQueue[i])
-                            break
+                        elif task['function'] == 'retrieveTimelineStatus' and not api['userTimelineLock']:
+                            if api['userTimelineLeft'] > 0:
+                                task['kwargs']['api'] = api
+                                thread = threading.Thread(target=retrieveTimelineStatus, kwargs=task['kwargs'])
+                                thread.start()
+                                api['userTimelineLock'] = True
+                                deleteTask.append(taskQueue[i])
+                                break
 
             for task in deleteTask:
                 taskQueue.remove(task)
