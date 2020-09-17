@@ -22,6 +22,18 @@ tweetsRecord = list()
 
 lock = threading.RLock()
 
+def loadState():
+    global processTweetsIds
+    global processUserIds
+    global taskQueue
+
+    with open('taskQueue.txt') as f:
+        taskQueue = json.load(f)
+    with open('processTweetsIds') as f:
+        processTweetsIds = json.load(f)
+    with open('processUserIds.txt') as f:
+        processUserIds = json.load(f)
+
 def saveState():
     global processTweetsIds
     global processUserIds
@@ -45,7 +57,7 @@ def saveState():
 
     with open('taskQueue.txt','w') as f:
         json.dump(taskQueue,f)
-    
+
     with open('processTweetsIds.txt','w') as f:
         json.dump(list(processTweetsIds),f)
 
@@ -126,7 +138,7 @@ def checkRateLimit(api):
     search = response['resources']['search']['/search/tweets']
     api['searchRequestLeft'] = search['remaining']
     api['searchResetTime'] = search['reset']
-    
+
     follower = response['resources']['followers']['/followers/list']
     api['followerRequestLeft'] = follower['remaining']
     api['followerResetTime'] = follower['reset']
@@ -175,7 +187,7 @@ def searchTweet(mention,api, maxId = -1):
 
                 if 'retweeted_status' in tweet.keys():
                     record['full_text'] = tweet['retweeted_status']['full_text']
-                    
+
                 tweetsRecord.append(record)
                 processTweetsIds = processTweetsIds.union({tweet['id']})
 
@@ -205,7 +217,7 @@ def searchTweet(mention,api, maxId = -1):
         checkRateLimit(api)
     except tweepy.TweepError:
         pass
-        
+
     if not isExhaust:
         createTasks(function='searchTweet', maxId=maxId, mention=mention)
 
@@ -244,7 +256,7 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
 
                 if 'retweeted_status' in tweet:
                     record['full_text'] = tweet['retweeted_status']['full_text']
-                    
+
                 tweetsRecord.append(record)
 
                 if tweet['id'] < maxId:
@@ -373,13 +385,11 @@ def scheduler():
             taskQueue.remove(task)
         lock.release()
 
-
-
 if __name__ == '__main__':
     screenNames = list()
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
-    
+
     authenApis('../config/app.json')
     initTask()
     scheduler()
