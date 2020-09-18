@@ -397,11 +397,15 @@ def scheduler():
                     break
 
                 if memory.percent > 70:
+                    gc.collect()
+                    memory = psutil.virtual_memory()
+
+                if memory.percent > 75:
                     thread1 = threading.Thread(target=resizeTaskQueue)
                     thread2 = threading.Thread(target=saveState)
                     thread1.start()
                     thread2.start()
-                    gc.collect()
+                    memory = psutil.virtual_memory()
 
                 if memory.percent > 85:
                     saveState()
