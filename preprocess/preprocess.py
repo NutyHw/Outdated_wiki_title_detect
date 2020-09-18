@@ -3,10 +3,13 @@ from dateutil.parser import parse
 from datetime import timedelta
 import os
 import json
-import threading
 from dotenv import load_dotenv
+import threading
 
 load_dotenv('../config/crawler.env')
+
+ids = set()
+preprocessUsers = list()
 
 def connect():
     client = MongoClient(
@@ -44,9 +47,10 @@ def createTweetsTime(db):
 
 def removeDuplicateTweets(db):
     cursor = db.rawTweets.find({})
-    
+
     preprocessRecords = list()
-    ids = set()
+    ids = set(db.preprocessTweets.distinct('id'))
+
     for record in cursor:
         if record['id'] in ids:
             continue
@@ -60,7 +64,7 @@ def removeDuplicateUsers(db):
     cursor = db.rawUsers.find({})
 
     preprocessUsers = list()
-    ids = set()
+    ids = set(db.preprocessUsers.distinct('id'))
 
     for record in cursor:
         if record['id'] in ids:
@@ -68,16 +72,15 @@ def removeDuplicateUsers(db):
         ids = ids.union({record['id']})
         record['created_at'] = parse(record['created_at'])
         preprocessUsers.append(record)
+
     db.preprocessUsers.insert_many(preprocessUsers)
 
 if __name__ == '__main__':
     db = connect()
-    thread1 = threading.Thread(target=removeDuplicateUsers,args=(db,))
-    thread2 = threading.Thread(target=removeDuplicateTweets,args=(db,))
-
+    thread1 = threading.Thread(target=removeDuplicateTweets,args=(db,))
+    thread2 = threading.Thread(target=removeDuplicateUsers, args=(db,))
     thread1.start()
     thread2.start()
 
-    thread1.join()
     thread2.join()
-
+    thread1.join()
