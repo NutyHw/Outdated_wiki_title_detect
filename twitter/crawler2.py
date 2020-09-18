@@ -43,8 +43,8 @@ def loadState():
     )
 
     db = client[os.getenv('authSource')]
-    processTweetsIds = db.preprocessTweets.distinct('id')
-    processUserIds = db.preprocessUsers.distinct('id')
+    processTweetsIds = set(db.preprocessTweets.distinct('id'))
+    processUserIds = set(db.preprocessUsers.distinct('id'))
 
     with open('taskQueue.txt') as f:
         taskQueue = json.load(f)
