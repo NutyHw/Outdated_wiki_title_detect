@@ -46,29 +46,30 @@ def createHashtagSignal(allHashtags,df):
         dates.append(start)
         start += relativedelta(hours=3)
 
-    for hashtag in allHashtags:
+    for i in range(len(allHashtags))
+        hashtag = allHashtags[i]
         res = dict()
         cursor = 0
         tmpDf = df[ df['hashtags'] == hashtag ]
-        res[hashtag] = [ 0 ]
+        res[i] = [ 0 ]
         res['date'] = [ dates[0].strftime('%D-%H:%M') ]
 
         for index,row in tmpDf.iterrows():
             if cursor == len(dates):
                 break
-            if row['created_at'] > dates[cursor+1]:
+
+            while row['created_at'] > dates[cursor+1]:
                 cursor += 1
                 res['date'].append(dates[cursor].strftime('%D-%H:%M'))
-                res[hashtag].append(0)
-                continue
+                res[i].append(0)
 
             if row['created-at'] >= dates[cursor]:
-                res[-1] += 1
+                res[i][-1] += 1
 
         for i in range(cursor+1,len(dates)):
-            res[hashtag].append(0)
+            res[i].append(0)
 
-        fname = f'signal-{hashtag}'
+        fname = f'signal-{i}'
         with open(fname,'w') as f:
            json.dump(res,f)
 
