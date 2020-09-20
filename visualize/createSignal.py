@@ -4,10 +4,10 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from dateutil.parser import parse
 
-df = pd.read_csv('../data/18-09-2021/tweets.csv')
+df = pd.read_csv('./tweets.csv')
 df = df.dropna()
 df['created_at'] = df['created_at'].apply(lambda date: parse(date))
-df['hashtags'] = df['hashtags'].apply(lambda s: s.strip(')').strip('(').split(','))
+df['hashtags'] = df['hashtags'].apply(lambda s: s.strip(']').strip('[').split(','))
 df = df.explode('hashtags')
 
 def createTimeWindow():
@@ -34,11 +34,7 @@ def createTimeWindow():
     return freq, dates
 
 def getDistinctHashtags(newDf):
-    allHashtags = set()
-    for index,row in newDf.iterrows():
-        row['hashtags'] = row['hashtags'].strip('[').strip(']').split(',')
-        allHashtags = allHashtags.union(row['hashtags'])
-    return allHashtags
+    return set(df['hashtags'])
 
 def createHashtagSignal(allHashtags,df):
     allDates = df['created_at'].sort_values().tolist()
@@ -57,7 +53,7 @@ def createHashtagSignal(allHashtags,df):
         res[hashtag] = [ 0 ]
         res['date'] = [ dates[0].strftime('%D-%H:%M') ]
 
-        for row in tmpDf.iterrows():
+        for index,row in tmpDf.iterrows():
             if cursor == len(dates):
                 break
             if row['created_at'] > dates[cursor+1]:
@@ -72,12 +68,12 @@ def createHashtagSignal(allHashtags,df):
         for i in range(cursor+1,len(dates)):
             res[hashtag].append(0)
 
-       fname = f'signal-{hashtag}'
-       with open(fname,'w') as f:
+        fname = f'signal-{hashtag}'
+        with open(fname,'w') as f:
            json.dump(res,f)
 
 if __name__ == '__main__':
-    newDf = df[ df['created_at'] > datetime(2020,9,1) ]
-
-    allHashtags = getDistinctHashtags(newDf)
-    createHashtagSignal(allHashtags,newDf)
+    allHashtags = list()
+    with open('allHastags.txt') as f:
+        allHashtags = [ line.strip() for line in f.read().splitlines() ]
+    createHashtagSignal(allHashtags,df)
