@@ -8,6 +8,7 @@ df = pd.read_csv('./tweets.csv')
 df = df.dropna()
 df['created_at'] = df['created_at'].apply(lambda date: parse(date))
 df['hashtags'] = df['hashtags'].apply(lambda s: s.strip(']').strip('[').split(','))
+df['hashtags'] = df['hashtags'].apply(lambda s: [ hashtag.strip() for hashtag in s ])
 df = df.explode('hashtags')
 
 def createTimeWindow():
