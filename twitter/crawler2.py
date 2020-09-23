@@ -413,19 +413,11 @@ def scheduler():
             taskQueue.remove(task)
         deleteTask.clear()
 
-        if len(taskQueue) == 0:
-            loadTask()
-
-        for i in range(len(taskPool)):
-            if len(taskQueue) < 10000:
-                taskQueue.append(deepcopy(taskPool[i]))
-            else:
-                taskPool = taskPool[i:]
-                break
-
         if len(taskPool) > 10000:
             saveTask()
 
+        if len(taskQueue) == 0:
+            loadTask()
 
 if __name__ == '__main__':
     screenNames = list()
