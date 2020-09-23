@@ -103,8 +103,8 @@ def saveTask():
 
     db = client[os.getenv('authSource')]
 
-    with Locks['processPool']:
-        db.taskPool.insert_many(processPool)
+    with Locks['taskPool']:
+        db.taskPool.insert_many(taskPool)
         taskPool.clear()
 
 def loadTask():
@@ -187,20 +187,19 @@ def authenApis(fpath):
         checkRateLimit(api)
 
 def checkRateLimit(api):
-    with api['mutexLock']:
-        response = api['api'].rate_limit_status()
-        search = response['resources']['search']['/search/tweets']
-        api['searchRequestLeft'] = search['remaining']
-        api['searchResetTime'] = search['reset']
+    response = api['api'].rate_limit_status()
+    search = response['resources']['search']['/search/tweets']
+    api['searchRequestLeft'] = search['remaining']
+    api['searchResetTime'] = search['reset']
 
-        follower = response['resources']['followers']['/followers/list']
-        api['followerRequestLeft'] = follower['remaining']
-        api['followerResetTime'] = follower['reset']
+    follower = response['resources']['followers']['/followers/list']
+    api['followerRequestLeft'] = follower['remaining']
+    api['followerResetTime'] = follower['reset']
 
 
-        timeline = response['resources']['statuses']['/statuses/user_timeline']
-        api['userTimelineLeft'] = timeline['remaining']
-        api['userTimelineResetTime'] = timeline['reset']
+    timeline = response['resources']['statuses']['/statuses/user_timeline']
+    api['userTimelineLeft'] = timeline['remaining']
+    api['userTimelineResetTime'] = timeline['reset']
 
 def searchTweet(mention,api, maxId = -1):
     global processTweetsIds
@@ -254,7 +253,7 @@ def searchTweet(mention,api, maxId = -1):
                 with Locks['processUserIds']:
                     if tweet['user']['id'] in processUserIds:
                         continue
-                    processUserIds = processUserIds.union(tweet['user']['id'])
+                    processUserIds = processUserIds.union({tweet['user']['id']})
 
                 with Locks['usersRecords']:
                     usersRecords.append({
@@ -393,6 +392,7 @@ def initTask():
 
 def scheduler():
     global taskQueue
+    global taskPool
     global apis
     global queueUserIds
 
@@ -458,7 +458,7 @@ def scheduler():
         deleteTask.clear()
 
         if len(taskQueue) == 0:
-            loadProcess()
+            loadTask()
 
         for i in range(len(taskPool)):
             if len(taskQueue) < 10000:
@@ -468,7 +468,8 @@ def scheduler():
                 break
 
         if len(taskPool) > 10000:
-            saveProcess()
+            saveTask()
+
 
 if __name__ == '__main__':
     screenNames = list()
