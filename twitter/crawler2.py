@@ -4,7 +4,6 @@ import json
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import os
-import sched
 import threading
 from copy import deepcopy
 from dateutil.parser import parse
@@ -13,7 +12,10 @@ load_dotenv(dotenv_path='../config/crawler.env')
 
 processTweetsIds = set()
 processUserIds = set()
+
 taskQueue = list()
+taskPool = list()
+
 queueUserIds = set()
 usersRecords = list()
 tweetsRecord = list()
@@ -22,11 +24,11 @@ apis = list()
 Locks = {
     'processTweetsIds' : threading.RLock(),
     'processUserIds' : threading.RLock(),
-    'taskQueue' : threading.RLock(),
     'queueUserIds' : threading.RLock(),
     'usersRecords' : threading.RLock(),
     'tweetsRecord' : threading.RLock(),
-    'apis' : threading.RLock()
+    'apis' : threading.RLock(),
+    'taskPool' : threading.RLock()
 }
 
 def loadState():
@@ -45,9 +47,6 @@ def loadState():
     db = client[os.getenv('authSource')]
     processTweetsIds = set(db.preprocessTweets.distinct('id'))
     processUserIds = set(db.preprocessUsers.distinct('id'))
-
-    with open('taskQueue.txt') as f:
-        taskQueue = json.load(f)
 
 def saveState():
     global processTweetsIds
@@ -92,12 +91,48 @@ def saveState():
         with open('processUserIds.txt','w') as f:
             json.dump(list(processUserIds),f)
 
-def createTasks(**kwargs):
-    global taskQueue
+def saveTask():
+    client = MongoClient(
+        host=os.getenv('host'),
+        port=int(os.getenv('port')),
+        username=os.getenv('username'),
+        password=os.getenv('password'),
+        authSource=os.getenv('authSource'),
+        authMechanism=os.getenv('authMechanism')
+    )
 
-    with Locks['taskQueue']:
+    db = client[os.getenv('authSource')]
+
+    with Locks['processPool']:
+        db.taskPool.insert_many(processPool)
+        taskPool.clear()
+
+def loadTask():
+    client = MongoClient(
+        host=os.getenv('host'),
+        port=int(os.getenv('port')),
+        username=os.getenv('username'),
+        password=os.getenv('password'),
+        authSource=os.getenv('authSource'),
+        authMechanism=os.getenv('authMechanism')
+    )
+
+    db = client[os.getenv('authSource')]
+    cursor = db.taskPool.find()
+
+    for record in cursor:
+        if len(taskQueue) > 10000:
+            break
+        taskQueue.append(record)
+
+    db.taskPool.delete_many({ '_id' : { '$in' : [ task['_id'] for task in taskQueue ] } })
+
+def createTasks(**kwargs):
+    global taskPool
+
+    with Locks['taskPool']:
         if kwargs['function'] == 'searchTweet':
-            taskQueue.append({
+            taskPool.append({
                 'function' : 'searchTweet',
                 'kwargs' : {
                     'maxId' : kwargs['maxId'],
@@ -105,7 +140,7 @@ def createTasks(**kwargs):
                 }
             })
         elif kwargs['function'] == 'followerList':
-            taskQueue.append({
+            taskPool.append({
                 'function' : 'followerList',
                 'kwargs' : {
                     'cursor' : kwargs['cursor'],
@@ -113,7 +148,7 @@ def createTasks(**kwargs):
                 }
             })
         elif kwargs['function'] == 'retrieveTimelineStatus':
-            taskQueue.append({
+            taskPool.append({
             'function' : 'retrieveTimelineStatus',
             'kwargs' : {
                 'userId' : kwargs['userId'],
@@ -142,8 +177,7 @@ def authenApis(fpath):
             'followerLock' : False,
             'userTimelineResetTime' : None,
             'userTimelineLeft' : None,
-            'userTimelineLock' : False,
-            'mutexLock' : threading.RLock()
+            'userTimelineLock' : False
         })
 
     with Locks['apis']:
@@ -181,11 +215,10 @@ def searchTweet(mention,api, maxId = -1):
 
     try:
         while api['searchRequestLeft'] > 0 and not isExhaust:
-            with api['mutexLock']:
-                if maxId == -1:
-                    response = api['api'].search(q=mention, lang='th', count = 100, result_type = 'mixed', tweet_mode='extended')
-                else:
-                    response = api['api'].search(q=mention, lang='th', count = 100, result_type = 'mixed', max_id = maxId, tweet_mode='extended')
+            if maxId == -1:
+                response = api['api'].search(q=mention, lang='th', count = 100, result_type = 'mixed', tweet_mode='extended')
+            else:
+                response = api['api'].search(q=mention, lang='th', count = 100, result_type = 'mixed', max_id = maxId, tweet_mode='extended')
 
             isExhaust = True
 
@@ -195,6 +228,7 @@ def searchTweet(mention,api, maxId = -1):
                 with Locks['processTweetsIds']:
                     if tweet['id'] in processTweetsIds:
                         continue
+                    processTweetsIds = processTweetsIds.union({tweet['id']})
 
                 record = {
                     'created_at' : parse(tweet['created_at']),
@@ -204,7 +238,7 @@ def searchTweet(mention,api, maxId = -1):
                     'hashtags' : tweet['entities']['hashtags'],
                     'user_mentions' : tweet['entities']['user_mentions'],
                     'retweet_count' : tweet['retweet_count'],
-                    'retweeted' : hasattr(tweet, 'retweeted_status')
+                    'retweeted' : 'retweeted_status' in tweet.keys()
                 }
 
                 if 'retweeted_status' in tweet.keys():
@@ -212,16 +246,16 @@ def searchTweet(mention,api, maxId = -1):
 
                 with Locks['tweetsRecord']:
                     tweetsRecord.append(record)
-                with Locks['processTweetsIds']:
-                    processTweetsIds = processTweetsIds.union({tweet['id']})
 
-                if tweet['id'] < maxId:
+                if tweet['id'] < maxId or maxId == -1:
                     isExhaust = False
                     maxId = tweet['id']
 
                 with Locks['processUserIds']:
                     if tweet['user']['id'] in processUserIds:
                         continue
+                    processUserIds = processUserIds.union(tweet['user']['id'])
+
                 with Locks['usersRecords']:
                     usersRecords.append({
                         'id' : tweet['user']['id'],
@@ -245,8 +279,8 @@ def searchTweet(mention,api, maxId = -1):
 
     if not isExhaust:
         createTasks(function='searchTweet', maxId=maxId, mention=mention)
-    with api['mutexLock']:
-        api['searchTweetLock'] = False
+
+    api['searchTweetLock'] = False
 
 def retrieveTimelineStatus(userId, api, maxId=-1):
     global tweetsRecord
@@ -258,11 +292,10 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
         while api['userTimelineLeft'] > 0 and not isExhaust:
             response = None
 
-            with api['mutexLock']:
-                if maxId == -1:
-                    response = api['api'].user_timeline(id=userId, count=200, tweet_mode='extended')
-                else:
-                    response = api['api'].user_timeline(id=userId, max_id=maxId, count=200, tweet_mode='extended')
+            if maxId == -1:
+                response = api['api'].user_timeline(id=userId, count=200, tweet_mode='extended')
+            else:
+                response = api['api'].user_timeline(id=userId, max_id=maxId, count=200, tweet_mode='extended')
 
             isExhaust = True
             for tweet in response:
@@ -271,6 +304,7 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
                 with Locks['processTweetsIds']:
                     if tweet['id'] in processTweetsIds:
                         continue
+                    processTweetsIds = processTweetsIds.union({tweet['id']})
 
                 record = {
                     'created_at' : parse(tweet['created_at']),
@@ -280,7 +314,7 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
                     'hashtags' : tweet['entities']['hashtags'],
                     'user_mentions' : tweet['entities']['user_mentions'],
                     'retweet_count' : tweet['retweet_count'],
-                    'retweeted' : hasattr(tweet, 'retweeted_status')
+                    'retweeted' : 'retweeted_status' in tweet.keys()
                 }
 
                 if 'retweeted_status' in tweet:
@@ -289,7 +323,7 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
                 with Locks['tweetsRecord']:
                     tweetsRecord.append(record)
 
-                if tweet['id'] < maxId:
+                if tweet['id'] < maxId or maxId == -1:
                     maxId = tweet['id']
                     isExhaust = False
 
@@ -309,8 +343,7 @@ def followerList(userId, api, cursor=-1):
     global queueUserIds
     try:
         while cursor != 0 and api['followerRequestLeft'] > 0:
-            with api['mutexLock']:
-                response = api['api'].followers(id = userId, cursor=cursor, count = 200)
+            response = api['api'].followers(id = userId, cursor=cursor, count = 200)
 
             for user in response[0]:
                 user = user._json
@@ -318,6 +351,7 @@ def followerList(userId, api, cursor=-1):
                 with Locks['processUserIds']:
                     if user['id'] in processUserIds:
                         continue
+                    processUserIds = processUserIds.union({user['id']})
 
                 with Locks['queueUserIds']:
                     queueUserIds = queueUserIds.union({user['id']})
@@ -332,10 +366,9 @@ def followerList(userId, api, cursor=-1):
                         'friends_count' : user['friends_count'],
                         'statuses_count' : user['statuses_count'],
                         'created_at' : parse(user['created_at'])
+                        'follow' : str(userId)
                     })
 
-            with api['mutexLock']:
-                api['followerRequestLeft'] -= 1
             cursor = response[1][1]
     except tweepy.RateLimitError:
         checkRateLimit(api)
@@ -370,7 +403,7 @@ def scheduler():
     while datetime.now() < runUntil and len(taskQueue) > 0:
         deleteTask = list()
 
-        if threading.activeCount() > 3:
+        if threading.activeCount() > 8:
             continue
 
         if lastSave + timedelta(hours=1) < datetime.now():
@@ -387,44 +420,55 @@ def scheduler():
             createTasks(function='followerList', cursor=-1, userId=userId)
             createTasks(function='retrieveTimelineStatus', maxId=-1, userId=userId)
 
-        with Locks['taskQueue']:
-            for i in range(len(taskQueue)):
-                if threading.activeCount() > 3:
-                    break
+        for i in range(len(taskQueue)):
+            if threading.activeCount() > 3:
+                break
 
-                task = deepcopy(taskQueue[i])
-                for api in apis:
-                    with api['mutexLock']:
-                        if task['function'] == 'searchTweet' and not api['searchTweetLock']:
-                            if api['searchRequestLeft'] > 0:
-                                task['kwargs']['api'] = api
-                                thread = threading.Thread(target=searchTweet, kwargs=task['kwargs'])
-                                thread.start()
-                                api['searchTweetLock'] = True
-                                deleteTask.append(taskQueue[i])
-                                break
+            task = deepcopy(taskQueue[i])
+            for api in apis:
+                if task['function'] == 'searchTweet' and not api['searchTweetLock']:
+                    if api['searchRequestLeft'] > 0:
+                        task['kwargs']['api'] = api
+                        thread = threading.Thread(target=searchTweet, kwargs=task['kwargs'])
+                        thread.start()
+                        api['searchTweetLock'] = True
+                        deleteTask.append(taskQueue[i])
+                        break
 
-                        elif task['function'] == 'followerList' and not api['followerLock']:
-                            if api['followerRequestLeft'] > 0:
-                                task['kwargs']['api'] = api
-                                thread = threading.Thread(target=followerList, kwargs=task['kwargs'])
-                                thread.start()
-                                api['followerLock'] = True
-                                deleteTask.append(taskQueue[i])
-                                break
+                    elif task['function'] == 'followerList' and not api['followerLock']:
+                        if api['followerRequestLeft'] > 0:
+                            task['kwargs']['api'] = api
+                            thread = threading.Thread(target=followerList, kwargs=task['kwargs'])
+                            thread.start()
+                            api['followerLock'] = True
+                            deleteTask.append(taskQueue[i])
+                            break
 
-                        elif task['function'] == 'retrieveTimelineStatus' and not api['userTimelineLock']:
-                            if api['userTimelineLeft'] > 0:
-                                task['kwargs']['api'] = api
-                                thread = threading.Thread(target=retrieveTimelineStatus, kwargs=task['kwargs'])
-                                thread.start()
-                                api['userTimelineLock'] = True
-                                deleteTask.append(taskQueue[i])
-                                break
+                    elif task['function'] == 'retrieveTimelineStatus' and not api['userTimelineLock']:
+                        if api['userTimelineLeft'] > 0:
+                            task['kwargs']['api'] = api
+                            thread = threading.Thread(target=retrieveTimelineStatus, kwargs=task['kwargs'])
+                            thread.start()
+                            api['userTimelineLock'] = True
+                            deleteTask.append(taskQueue[i])
+                            break
 
-            for task in deleteTask:
-                taskQueue.remove(task)
-            deleteTask.clear()
+        for task in deleteTask:
+            taskQueue.remove(task)
+        deleteTask.clear()
+
+        if len(taskQueue) == 0:
+            loadProcess()
+
+        for i in range(len(taskPool)):
+            if len(taskQueue) < 10000:
+                taskQueue.append(deepcopy(taskPool[i]))
+            else:
+                taskPool = taskPool[i:]
+                break
+
+        if len(taskPool) > 10000:
+            saveProcess()
 
 if __name__ == '__main__':
     screenNames = list()
