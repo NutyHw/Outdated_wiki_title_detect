@@ -7,6 +7,7 @@ import os
 import threading
 from copy import deepcopy
 from dateutil.parser import parse
+from bson.objectid import ObjectId
 
 load_dotenv(dotenv_path='../config/crawler.env')
 
@@ -75,14 +76,14 @@ def loadTask():
     )
 
     db = client[os.getenv('authSource')]
-    cursor = db.taskPool.find()
+    cursor = db.taskPool_test.find()
 
     for record in cursor:
         if len(taskQueue) > 10000:
             break
         taskQueue.append(record)
 
-    db.taskPool.delete_many({ '_id' : { '$in' : [ task['_id'] for task in taskQueue ] } })
+    db.taskPool_test.delete_many({ '_id' : { '$in' : [ ObjectId(task['_id']) for task in taskQueue ] } })
 
 def createTasks(**kwargs):
     global taskPool
@@ -371,10 +372,11 @@ def scheduler():
             thread.start()
             lastCheckRatelimit = datetime.now()
 
-        with Locks['queueUserIds':]
+        with Locks['queueUserIds']:
             for userId in queueUserIds:
                 createTasks(function='followerList', cursor=-1, userId=userId)
                 createTasks(function='retrieveTimelineStatus', maxId=-1, userId=userId)
+            queueUserIds.clear()
 
         for i in range(len(taskQueue)):
             if threading.activeCount() > 4:
@@ -424,6 +426,4 @@ if __name__ == '__main__':
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
 
-    authenApis('../config/app.json')
-    initTask()
-    scheduler()
+    loadTask()
