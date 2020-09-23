@@ -365,7 +365,7 @@ def followerList(userId, api, cursor=-1):
                         'followers_count' : user['followers_count'],
                         'friends_count' : user['friends_count'],
                         'statuses_count' : user['statuses_count'],
-                        'created_at' : parse(user['created_at'])
+                        'created_at' : parse(user['created_at']),
                         'follow' : str(userId)
                     })
 
@@ -477,5 +477,4 @@ if __name__ == '__main__':
 
     authenApis('../config/app.json')
     initTask()
-    loadState()
     scheduler()
