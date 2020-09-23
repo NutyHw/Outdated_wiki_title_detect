@@ -354,7 +354,7 @@ def scheduler():
 
     lastCheckRatelimit = datetime.now()
     lastSave = datetime.now()
-    runUntil = datetime.now() + timedelta(days=1)
+    runUntil = datetime.now() + timedelta(hours=12)
 
     while datetime.now() < runUntil and len(taskQueue) > 0:
         deleteTask = list()
