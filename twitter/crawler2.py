@@ -426,4 +426,5 @@ if __name__ == '__main__':
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
 
-    loadTask()
+    initTask()
+    scheduler()
