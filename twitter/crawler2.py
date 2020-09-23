@@ -371,7 +371,7 @@ def scheduler():
             thread.start()
             lastCheckRatelimit = datetime.now()
 
-        with Locks['queueUserIds':]
+        with Locks['queueUserIds']:
             for userId in queueUserIds:
                 createTasks(function='followerList', cursor=-1, userId=userId)
                 createTasks(function='retrieveTimelineStatus', maxId=-1, userId=userId)
