@@ -48,49 +48,6 @@ def loadState():
     processTweetsIds = set(db.preprocessTweets.distinct('id'))
     processUserIds = set(db.preprocessUsers.distinct('id'))
 
-def saveState():
-    global processTweetsIds
-    global processUserIds
-    global tweetsRecord
-    global usersRecords
-    global Locks
-
-    client = MongoClient(
-        host=os.getenv('host'),
-        port=int(os.getenv('port')),
-        username=os.getenv('username'),
-        password=os.getenv('password'),
-        authSource=os.getenv('authSource'),
-        authMechanism=os.getenv('authMechanism')
-    )
-
-    db = client[os.getenv('authSource')]
-
-    with Locks['tweetsRecord']:
-        with Locks['usersRecords']:
-            with open('crawler.log','a') as f:
-                f.write(f'tweetsRecord : {len(tweetsRecord)}, usersRecords : {len(usersRecords)}\n')
-
-            if len(usersRecords) > 0:
-                db.rawUsers.insert_many(usersRecords)
-            if len(tweetsRecord) > 0:
-                db.rawTweets.insert_many(tweetsRecord)
-
-            usersRecords.clear()
-            tweetsRecord.clear()
-
-    with Locks['taskQueue']:
-        with open('taskQueue.txt','w') as f:
-            json.dump(taskQueue,f)
-
-    with Locks['processTweetsIds']:
-        with open('processTweetsIds.txt','w') as f:
-            json.dump(list(processTweetsIds),f)
-
-    with Locks['processUserIds']:
-        with open('processUserIds.txt','w') as f:
-            json.dump(list(processUserIds),f)
-
 def saveTask():
     client = MongoClient(
         host=os.getenv('host'),
@@ -334,8 +291,7 @@ def retrieveTimelineStatus(userId, api, maxId=-1):
 
     if not isExhaust:
         createTasks(userId=userId, maxId=maxId, function='retrieveTimelineStatus')
-    with api['mutexLock']:
-        api['userTimelineLock'] = False
+    api['userTimelineLock'] = False
 
 def followerList(userId, api, cursor=-1):
     global processUserIds
@@ -376,8 +332,7 @@ def followerList(userId, api, cursor=-1):
 
     if cursor != 0:
         createTasks(userId=userId, cursor=cursor,function='followerList')
-    with api['mutexLock']:
-        api['followerLock'] = False
+    api['followerLock'] = False
 
 def initTask():
     global taskQueue
@@ -403,7 +358,7 @@ def scheduler():
     while datetime.now() < runUntil and len(taskQueue) > 0:
         deleteTask = list()
 
-        if threading.activeCount() > 8:
+        if threading.activeCount() > 4:
             continue
 
         if lastSave + timedelta(hours=1) < datetime.now():
@@ -416,12 +371,13 @@ def scheduler():
             thread.start()
             lastCheckRatelimit = datetime.now()
 
-        for userId in queueUserIds:
-            createTasks(function='followerList', cursor=-1, userId=userId)
-            createTasks(function='retrieveTimelineStatus', maxId=-1, userId=userId)
+        with Locks['queueUserIds':]
+            for userId in queueUserIds:
+                createTasks(function='followerList', cursor=-1, userId=userId)
+                createTasks(function='retrieveTimelineStatus', maxId=-1, userId=userId)
 
         for i in range(len(taskQueue)):
-            if threading.activeCount() > 3:
+            if threading.activeCount() > 4:
                 break
 
             task = deepcopy(taskQueue[i])
