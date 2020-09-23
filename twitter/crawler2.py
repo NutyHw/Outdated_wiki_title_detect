@@ -412,23 +412,23 @@ def scheduler():
                         deleteTask.append(taskQueue[i])
                         break
 
-                    elif task['function'] == 'followerList' and not api['followerLock']:
-                        if api['followerRequestLeft'] > 0:
-                            task['kwargs']['api'] = api
-                            thread = threading.Thread(target=followerList, kwargs=task['kwargs'])
-                            thread.start()
-                            api['followerLock'] = True
-                            deleteTask.append(taskQueue[i])
-                            break
+                elif task['function'] == 'followerList' and not api['followerLock']:
+                    if api['followerRequestLeft'] > 0:
+                        task['kwargs']['api'] = api
+                        thread = threading.Thread(target=followerList, kwargs=task['kwargs'])
+                        thread.start()
+                        api['followerLock'] = True
+                        deleteTask.append(taskQueue[i])
+                        break
 
-                    elif task['function'] == 'retrieveTimelineStatus' and not api['userTimelineLock']:
-                        if api['userTimelineLeft'] > 0:
-                            task['kwargs']['api'] = api
-                            thread = threading.Thread(target=retrieveTimelineStatus, kwargs=task['kwargs'])
-                            thread.start()
-                            api['userTimelineLock'] = True
-                            deleteTask.append(taskQueue[i])
-                            break
+                elif task['function'] == 'retrieveTimelineStatus' and not api['userTimelineLock']:
+                    if api['userTimelineLeft'] > 0:
+                        task['kwargs']['api'] = api
+                        thread = threading.Thread(target=retrieveTimelineStatus, kwargs=task['kwargs'])
+                        thread.start()
+                        api['userTimelineLock'] = True
+                        deleteTask.append(taskQueue[i])
+                        break
 
         for task in deleteTask:
             taskQueue.remove(task)
@@ -445,6 +445,6 @@ if __name__ == '__main__':
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
 
-    authenApis()
+    authenApis('../config/app.json')
     initTask()
     scheduler()
