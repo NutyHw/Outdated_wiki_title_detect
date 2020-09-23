@@ -49,6 +49,25 @@ def loadState():
     processTweetsIds = set(db.preprocessTweets.distinct('id'))
     processUserIds = set(db.preprocessUsers.distinct('id'))
 
+def saveState():
+    client = MongoClient(
+        host=os.getenv('host'),
+        port=int(os.getenv('port')),
+        username=os.getenv('username'),
+        password=os.getenv('password'),
+        authSource=os.getenv('authSource'),
+        authMechanism=os.getenv('authMechanism')
+    )
+
+    db = client[os.getenv('authSource')]
+
+    with Locks['tweetsRecord']:
+        db.rawTweets.insert_many(tweetsRecord)
+        tweetsRecord.clear()
+    with Locks['usersRecords']:
+        db.rawUsers.insert_many(usersRecords)
+        usersRecords.clear()
+
 def saveTask():
     client = MongoClient(
         host=os.getenv('host'),
@@ -426,5 +445,6 @@ if __name__ == '__main__':
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
 
+    authenApis()
     initTask()
     scheduler()
