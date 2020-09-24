@@ -95,14 +95,14 @@ def loadTask():
     )
 
     db = client[os.getenv('authSource')]
-    cursor = db.taskPool_test.find()
+    cursor = db.taskPool.find()
 
     for record in cursor:
         if len(taskQueue) > 10000:
             break
         taskQueue.append(record)
 
-    db.taskPool_test.delete_many({ '_id' : { '$in' : [ ObjectId(task['_id']) for task in taskQueue ] } })
+    db.taskPool.delete_many({ '_id' : { '$in' : [ ObjectId(task['_id']) for task in taskQueue ] } })
 
 def createTasks(**kwargs):
     global taskPool
