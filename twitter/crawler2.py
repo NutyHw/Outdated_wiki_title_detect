@@ -46,6 +46,7 @@ def loadState():
     )
 
     db = client[os.getenv('authSource')]
+    db.drop_collection('taskPool')
     processTweetsIds = set(db.preprocessTweets.distinct('id'))
     processUserIds = set(db.preprocessUsers.distinct('id'))
 
