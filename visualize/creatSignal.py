@@ -22,6 +22,7 @@ def getTweetsTimestamp(db):
     pipelines = [ 
         { '$unwind' : '$hashtags' },
         { '$project' : { 'created_at' : '$created_at', 'hashtag' : '$hashtags.text' }},
+        { '$match' : {  'created_at' : { '$gte' : datetime(2020,1,1) } }},
         { '$sort' : { 'created_at' : 1 }},
         { '$group' : {
             '_id' : { 'hashtag' : '$hashtag' },
@@ -40,7 +41,7 @@ def createTimewindowFreq(records):
     endTime = None
 
     for record in records:
-        if endTime is None or endTime < record['created_at'][-1]
+        if endTime is None or endTime < record['created_at'][-1]:
             endTime = record['created_at'][-1]
         if startTime is None or startTime > record['created_at'][0]:
             startTime = record['created_at'][0]
