@@ -47,7 +47,6 @@ def loadState():
 
     db = client[os.getenv('authSource')]
     db.drop_collection('taskPool')
-    processTweetsIds = set(db.preprocessTweets.distinct('id'))
 
 def saveState():
     client = MongoClient(
@@ -62,10 +61,12 @@ def saveState():
     db = client[os.getenv('authSource')]
 
     with Locks['tweetsRecord']:
-        db.rawTweets.insert_many(tweetsRecord)
+        for record in tweetsRecord:
+            db.rawTweets.update_one({ 'id' : record['id'] }, record, upsert=True)
         tweetsRecord.clear()
     with Locks['usersRecords']:
-        db.rawUsers.insert_many(usersRecords)
+        for record in usersRecords:
+            db.rawUsers.update_one({ 'id' : record['id'] }, record, upsert=True)
         usersRecords.clear()
 
 def saveTask():
