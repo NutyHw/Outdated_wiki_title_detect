@@ -447,5 +447,6 @@ if __name__ == '__main__':
         screenNames = f.read().splitlines()
 
     authenApis('../config/app.json')
+    loadState()
     initTask()
     scheduler()
