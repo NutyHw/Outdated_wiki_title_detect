@@ -62,11 +62,11 @@ def saveState():
 
     with Locks['tweetsRecord']:
         for record in tweetsRecord:
-            db.rawTweets.update_one({ 'id' : record['id'] }, record, upsert=True)
+            db.rawTweets.update_one({ 'id' : record['id'] }, { '$set' : record }, upsert=True)
         tweetsRecord.clear()
     with Locks['usersRecords']:
         for record in usersRecords:
-            db.rawUsers.update_one({ 'id' : record['id'] }, record, upsert=True)
+            db.rawUsers.update_one({ 'id' : record['id'] }, { '$set' : record }, upsert=True)
         usersRecords.clear()
 
 def saveTask():
