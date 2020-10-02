@@ -111,7 +111,7 @@ class TwitterCrawler:
         cursor = db.taskPool.find()
 
         for record in cursor:
-            if len(taskQueue) > 10000:
+            if len(self.taskQueue) > 10000:
                 break
             self.taskQueue.append(record)
 
