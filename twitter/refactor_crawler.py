@@ -516,10 +516,10 @@ class TwitterCrawler:
             deleteTask.clear()
 
             if len(self.taskPool) > 10000:
-                saveTask()
+                self.saveTask()
 
             if len(self.taskQueue) == 0:
-                loadTask()
+                self.loadTask()
 
 if __name__ == '__main__':
     screenNames = list()
