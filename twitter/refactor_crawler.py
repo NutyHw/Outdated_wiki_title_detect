@@ -117,6 +117,15 @@ class TwitterCrawler:
 
         db.taskPool.delete_many({ '_id' : { '$in' : [ ObjectId(task['_id']) for task in self.taskQueue ] } })
 
+        if len(self.taskQueue) < 10000:
+            if len(self.taskPool) < 10000:
+                self.taskQueue = deepcopy(self.taskPool)
+                self.taskPool.clear()
+            else:
+                self.taskQueue = deepcopy(self.taskPool[:10000])
+                self.taskPool = [10000:]
+
+
     def createTasks(self,**kwargs):
         with self.taskPoolLocker:
             if kwargs['function'] == 'searchTweet':
