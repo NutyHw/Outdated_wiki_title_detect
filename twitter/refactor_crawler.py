@@ -43,6 +43,7 @@ class TwitterCrawler:
         self.threadThreshold = threshold
         if mode == 'start':
             self.initTask()
+            self.authenApis('../config/app.json')
         elif mode == 'continue':
             self.loadTask()
         else:
