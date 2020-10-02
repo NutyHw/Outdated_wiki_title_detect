@@ -102,8 +102,8 @@ class TwitterCrawler:
     def saveTask(self):
         db = self.connect()
 
-        with self.taskPool:
-            db.taskPool.insert_many(taskPool)
+        with self.taskPoolLocker:
+            db.taskPool.insert_many(self.taskPool)
             self.taskPool.clear()
 
     def loadTask(self):
