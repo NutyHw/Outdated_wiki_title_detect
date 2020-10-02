@@ -439,7 +439,7 @@ class TwitterCrawler:
                     if task['function'] == 'searchTweet' and not api['searchTweetLock']:
                         if api['searchRequestLeft'] > 0:
                             task['kwargs']['api'] = api
-                            thread = threading.Thread(target=searchTweet, kwargs=task['kwargs'])
+                            thread = threading.Thread(target=self.searchTweet, kwargs=task['kwargs'])
                             thread.start()
                             allThreds.append(thread)
                             deleteTask.append(self.taskQueue[i])
@@ -448,7 +448,7 @@ class TwitterCrawler:
                     elif task['function'] == 'followerList' and not api['followerLock']:
                         if api['followerRequestLeft'] > 0:
                             task['kwargs']['api'] = api
-                            thread = threading.Thread(target=followerList, kwargs=task['kwargs'])
+                            thread = threading.Thread(target=self.followerList, kwargs=task['kwargs'])
                             thread.start()
                             deleteTask.append(self.taskQueue[i])
                             break
@@ -456,7 +456,7 @@ class TwitterCrawler:
                     elif task['function'] == 'retrieveTimelineStatus' and not api['userTimelineLock']:
                         if api['userTimelineLeft'] > 0:
                             task['kwargs']['api'] = api
-                            thread = threading.Thread(target=retrieveTimelineStatus, kwargs=task['kwargs'])
+                            thread = threading.Thread(target=self.retrieveTimelineStatus, kwargs=task['kwargs'])
                             thread.start()
                             deleteTask.append(self.taskQueue[i])
                             break
