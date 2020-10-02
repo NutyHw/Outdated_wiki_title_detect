@@ -64,6 +64,7 @@ def saveState():
         for record in tweetsRecord:
             db.rawTweets.update_one({ 'id' : record['id'] }, { '$set' : record }, upsert=True)
         tweetsRecord.clear()
+
     with Locks['usersRecords']:
         for record in usersRecords:
             db.rawUsers.update_one({ 'id' : record['id'] }, { '$set' : record }, upsert=True)
@@ -202,6 +203,8 @@ def searchTweet(mention,api, maxId = -1):
             for tweet in response:
                 tweet = tweet._json
 
+                print(tweet)
+                break
                 with Locks['processTweetsIds']:
                     if tweet['id'] in processTweetsIds:
                         continue
@@ -447,6 +450,5 @@ if __name__ == '__main__':
         screenNames = f.read().splitlines()
 
     authenApis('../config/app.json')
-    loadState()
     initTask()
     scheduler()
