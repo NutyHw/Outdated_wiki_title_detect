@@ -45,8 +45,6 @@ class TwitterCrawler:
             self.initTask()
         elif mode == 'continue':
             self.loadTask()
-        else:
-            raise ValueError(f'{mode} undefine')
 
     def connect(self):
         client = MongoClient(
@@ -248,13 +246,13 @@ class TwitterCrawler:
                             self.tweetsRecord.append(record)
                         else:
                             self.tweetsRecord.append({
-                                'record' : record['created_at'],
-                                'user_id' : record['user_id'],
+                                'record' : tweet['created_at'],
+                                'user_id' : tweet['user']['id'],
                                 'id' : record['id'],
                                 'entities' : [ {
                                     'updated_time' : datetime.now(),
-                                    'retweet_count' : record['retweet_count'],
-                                    'favorite_count' : record['favorite_count'],
+                                    'retweet_count' : tweet['retweet_count'],
+                                    'favorite_count' : tweet['favorite_count'],
                                 } ],
                                 'retweet_from' : originalRecord['id']
                             })
@@ -266,7 +264,7 @@ class TwitterCrawler:
 
                     with self.usersRecordsLocker:
                         with self.processUserIdsLocker:
-                            if tweet['user']['id'] not in processUserIds:
+                            if tweet['user']['id'] not in self.processUserIds:
                                 self.queueUserIds = self.queueUserIds.union({ tweet['user']['id'] })
                                 self.usersRecords.append({
                                     'id' : tweet['user']['id'],
@@ -282,7 +280,7 @@ class TwitterCrawler:
                                     'created_at' : parse(tweet['user']['created_at'])
                                 })
 
-                            if tweet['retweeted_status']['user']['id'] not in processUserIds:
+                            if 'retweeted_status' in tweet.keys() and tweet['retweeted_status']['user']['id'] not in self.processUserIds:
                                 self.queueUserIds = self.queueUserIds.union({ tweet['retweeted_status']['user']['id'] })
                                 self.usersRecords.append({
                                     'id' : originalTweet['user']['id'],
@@ -328,7 +326,7 @@ class TwitterCrawler:
                 for tweet in response:
                     tweet = tweet._json
 
-                    with self.processTweetsIds:
+                    with self.processTweetsIdsLocker:
                         if tweet['id'] in self.processTweetsIds:
                             continue
                         self.processTweetsIds = self.processTweetsIds.union({tweet['id']})
@@ -366,18 +364,21 @@ class TwitterCrawler:
                             } ]
                         }
 
-                        with self.processTweetsIds:
+                        with self.tweetsRecordLocker:
                             if originalRecord is None:
                                 self.tweetsRecord.append(record)
                             else:
                                 self.tweetsRecord.append({
-                                    'record' : record['created_at'],
-                                    'user_id' : record['user_id'],
-                                    'id' : record['id'],
-                                    'retweet_count' : record['retweet_count'],
+                                    'record' : tweet['created_at'],
+                                    'user_id' : tweet['user']['id'],
+                                    'entities' : [ {
+                                        'updated_time' : datetime.now(),
+                                        'retweet_count' : tweet['retweet_count'],
+                                        'favorite_count' : tweet['favorite_count'],
+                                    }],
                                     'retweet_from' : originalRecord['id']
                                 })
-                                if originalRecord not in self.processTweetsIds:
+                                if originalRecord['id'] not in self.processTweetsIds:
                                     self.tweetsRecord.append(originalRecord)
                                     self.processTweetsIds = self.processTweetsIds.union({ originalRecord['id'] })
 
@@ -424,9 +425,9 @@ class TwitterCrawler:
                             'entities' : [
                                 {
                                     'updated_time' : datetime.now(),
-                                    'followers_count' : originalTweet['user']['followers_count'],
-                                    'friends_count' : originalTweet['user']['friends_count'],
-                                    'statuses_count' : originalTweet['user']['statuses_count']
+                                    'followers_count' : user['followers_count'],
+                                    'friends_count' : user['friends_count'],
+                                    'statuses_count' : user['statuses_count']
                                 } 
                             ]
                         })
@@ -526,5 +527,3 @@ if __name__ == '__main__':
         screenNames = f.read().splitlines()
     crawler = TwitterCrawler(mode='start', threshold=8)
     crawler.run()
-
-
