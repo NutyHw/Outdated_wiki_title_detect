@@ -41,9 +41,9 @@ class TwitterCrawler:
         self.taskPoolLocker = threading.RLock()
 
         self.threadThreshold = threshold
+        self.authenApis('../config/app.json')
         if mode == 'start':
             self.initTask()
-            self.authenApis('../config/app.json')
         elif mode == 'continue':
             self.loadTask()
         else:
