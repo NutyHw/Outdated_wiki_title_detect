@@ -78,6 +78,11 @@ class TwitterCrawler:
                 db.rawUsers.update_one({ 'id' : record['id'] }, { '$set' : record }, upsert=True)
             self.usersRecords.clear()
 
+        rawTweetsCount = db.rawTweets.find().count()
+        rawUsersCount = db.rawUsers.find().count()
+        with open('crawler.log','a') as f:
+            f.writelines('Tweets count {rawTweetsCount}, Users count {rawUsersCount}\n')
+
     def saveTask(self):
         db = self.connect()
 
