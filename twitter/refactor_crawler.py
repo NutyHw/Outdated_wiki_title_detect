@@ -69,7 +69,7 @@ class TwitterCrawler:
         with self.tweetsRecordLocker:
             deleteRecord = list()
             for i in range(len(self.tweetsRecord)):
-                record = usersRecords[i]
+                record = self.tweetsRecord[i]
                 result = db.rawTweets.update_one(
                     { 'id' : record['id'] },
                     { '$push' : { 'entities' : record['entities'][0] }}
@@ -83,7 +83,7 @@ class TwitterCrawler:
         with self.usersRecordsLocker:
             deleteRecord = list()
             for i in range(len(self.usersRecords)):
-                record = usersRecords[i]
+                record = self.usersRecords[i]
                 result = db.rawUsers.update_one(
                     { 'id' : record['id'] },
                     { '$push' : { 'entities' : record['entities'][0] }}
