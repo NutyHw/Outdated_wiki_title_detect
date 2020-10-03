@@ -308,7 +308,7 @@ class TwitterCrawler:
                 api['searchRequestLeft'] -= 1
 
         except tweepy.RateLimitError:
-            checkRateLimit(api)
+            self.checkRateLimit(api)
         except tweepy.TweepError:
             pass
 
@@ -398,7 +398,7 @@ class TwitterCrawler:
 
                 api['userTimelineLeft'] -= 1
         except tweepy.RateLimitError:
-            checkRateLimit(api)
+            self.checkRateLimit(api)
         except tweepy.TweepError:
             pass
 
@@ -443,7 +443,7 @@ class TwitterCrawler:
 
                 cursor = response[1][1]
         except tweepy.RateLimitError:
-            checkRateLimit(api)
+            self.checkRateLimit(api)
         except tweepy.TweepError:
             pass
 
@@ -476,7 +476,7 @@ class TwitterCrawler:
                 allThreds.clear()
 
             if lastSave + timedelta(hours=1) < datetime.now():
-                thread = threading.Thread(target=saveState)
+                thread = threading.Thread(target=self.saveState)
                 thread.start()
                 allThreds.append(thread)
                 lastSave = datetime.now()
