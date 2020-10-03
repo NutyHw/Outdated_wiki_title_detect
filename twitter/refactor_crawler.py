@@ -94,8 +94,8 @@ class TwitterCrawler:
             db.rawUsers.insert_many(self.usersRecords)
             self.usersRecords.clear()
 
-        rawTweetsCount = db.rawTweets.find().count()
-        rawUsersCount = db.rawUsers.find().count()
+        rawTweetsCount = db.rawTweets.count_documents()
+        rawUsersCount = db.rawUsers.count_documents()
         with open('crawler.log','a') as f:
             f.writelines(f'Tweets count {rawTweetsCount}, Users count {rawUsersCount}\n')
 
