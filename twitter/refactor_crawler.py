@@ -123,7 +123,7 @@ class TwitterCrawler:
                 self.taskPool.clear()
             else:
                 self.taskQueue = deepcopy(self.taskPool[:10000])
-                self.taskPool = [10000:]
+                self.taskPool = self.taskPool[10000:]
 
 
     def createTasks(self,**kwargs):
