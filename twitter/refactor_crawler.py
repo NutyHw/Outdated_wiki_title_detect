@@ -97,7 +97,7 @@ class TwitterCrawler:
         rawTweetsCount = db.rawTweets.find().count()
         rawUsersCount = db.rawUsers.find().count()
         with open('crawler.log','a') as f:
-            f.writelines('Tweets count {rawTweetsCount}, Users count {rawUsersCount}\n')
+            f.writelines(f'Tweets count {rawTweetsCount}, Users count {rawUsersCount}\n')
 
     def saveTask(self):
         db = self.connect()
@@ -478,17 +478,6 @@ class TwitterCrawler:
         while datetime.now() < runUntil and len(self.taskQueue) > 0:
             deleteTask = list()
 
-            if threading.activeCount() > self.threadThreshold:
-                for thread in allThreds:
-                    thread.join()
-                allThreds.clear()
-
-            if lastSave + timedelta(hours=1) < datetime.now():
-                thread = threading.Thread(target=self.saveState)
-                thread.start()
-                allThreds.append(thread)
-                lastSave = datetime.now()
-
             with self.queueUserIdsLocker:
                 for userId in self.queueUserIds:
                     self.createTasks(function='followerList', cursor=-1, userId=userId)
@@ -501,7 +490,18 @@ class TwitterCrawler:
                         thread.join()
                     allThreds.clear()
 
-                task = deepcopy(self.taskQueue[i])
+                if lastSave + timedelta(hours=1) < datetime.now():
+                    thread = threading.Thread(target=self.saveState)
+                    thread.start()
+                    allThreds.append(thread)
+                    lastSave = datetime.now()
+                    task = deepcopy(self.taskQueue[i])
+
+                if lastCheckRatelimit + timedelta(minutes=5) < datetime.now():
+                    for api in self.apis:
+                        self.checkRateLimit(api)
+                    lastCheckRatelimit = datetime.now()
+
                 for api in self.apis:
                     if task['function'] == 'searchTweet' and not api['searchTweetLock']:
                         if api['searchRequestLeft'] > 0:
