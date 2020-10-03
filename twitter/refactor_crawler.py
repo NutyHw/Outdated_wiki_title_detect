@@ -475,14 +475,18 @@ class TwitterCrawler:
         runUntil = datetime.now() + timedelta(hours=12)
 
         allThreds = list()
-        while datetime.now() < runUntil and len(self.taskQueue) > 0:
+        while datetime.now() < runUntil:
             deleteTask = list()
+
 
             with self.queueUserIdsLocker:
                 for userId in self.queueUserIds:
                     self.createTasks(function='followerList', cursor=-1, userId=userId)
                     self.createTasks(function='retrieveTimelineStatus', maxId=-1, userId=userId)
                 self.queueUserIds.clear()
+
+            if len(self.taskQueue) == 0:
+                self.loadTask()
 
             for i in range(len(self.taskQueue)):
                 task = deepcopy(self.taskQueue[i])
@@ -496,7 +500,6 @@ class TwitterCrawler:
                     thread.start()
                     allThreds.append(thread)
                     lastSave = datetime.now()
-                    task = deepcopy(self.taskQueue[i])
 
                 if lastCheckRatelimit + timedelta(minutes=5) < datetime.now():
                     for api in self.apis:
@@ -506,8 +509,6 @@ class TwitterCrawler:
                 if len(self.taskPool) > 10000:
                     self.saveTask()
 
-                if len(self.taskQueue) == 0:
-                    self.loadTask()
 
                 for api in self.apis:
                     if task['function'] == 'searchTweet' and not api['searchTweetLock']:
