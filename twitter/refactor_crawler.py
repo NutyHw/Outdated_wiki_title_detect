@@ -485,6 +485,7 @@ class TwitterCrawler:
                 self.queueUserIds.clear()
 
             for i in range(len(self.taskQueue)):
+                task = deepcopy(self.taskQueue[i])
                 if threading.activeCount() > self.threadThreshold:
                     for thread in allThreds:
                         thread.join()
