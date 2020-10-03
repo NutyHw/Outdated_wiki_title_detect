@@ -502,6 +502,12 @@ class TwitterCrawler:
                         self.checkRateLimit(api)
                     lastCheckRatelimit = datetime.now()
 
+                if len(self.taskPool) > 10000:
+                    self.saveTask()
+
+                if len(self.taskQueue) == 0:
+                    self.loadTask()
+
                 for api in self.apis:
                     if task['function'] == 'searchTweet' and not api['searchTweetLock']:
                         if api['searchRequestLeft'] > 0:
@@ -532,15 +538,10 @@ class TwitterCrawler:
                 self.taskQueue.remove(task)
             deleteTask.clear()
 
-            if len(self.taskPool) > 10000:
-                self.saveTask()
-
-            if len(self.taskQueue) == 0:
-                self.loadTask()
 
 if __name__ == '__main__':
     screenNames = list()
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
     crawler = TwitterCrawler(mode='start', threshold=8)
-    crawler.saveState()
+    crawler.run()
