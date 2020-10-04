@@ -154,6 +154,114 @@ class TwitterCrawler:
                         'maxId' : kwargs['maxId']
                 }})
 
+    def insertTweetsRecord(self,tweet):
+        originalRecord = None
+
+        if 'retweeted_status' in tweet.keys():
+            originalTweet = tweet['retweeted_status']
+            originalRecord = {
+                'created_at' : parse(originalTweet['created_at']),
+                'user_id' : originalTweet['user']['id'],
+                'id' : originalTweet['id'],
+                'full_text' : originalTweet['full_text'],
+                'hashtags' : originalTweet['entities']['hashtags'],
+                'user_mentions' : originalTweet['entities']['user_mentions'],
+                'entities' : [{
+                    'updated_time' : datetime.now(),
+                    'retweet_count' : originalTweet['retweet_count'],
+                    'favorite_count' : originalTweet['favorite_count'],
+                }]
+            }
+
+        record = {
+            'created_at' : parse(tweet['created_at']),
+            'user_id' : tweet['user']['id'],
+            'id' : tweet['id'],
+            'full_text' : tweet['full_text'],
+            'hashtags' : tweet['entities']['hashtags'],
+            'user_mentions' : tweet['entities']['user_mentions'],
+            'entities' : [ {
+                'updated_time' : datetime.now(),
+                'retweet_count' : tweet['retweet_count'],
+                'favorite_count' : tweet['favorite_count'],
+            }]
+        }
+
+        insertRecord = False
+        insertOriginalRecord = False
+        with self.processTweetsIdsLocker:
+            if tweet['id'] not in self.processTweetsIds:
+                self.processTweetsIds = self.processTweetsIds.union({ tweet['id'] })
+                insertRecord = True
+            if originalRecord is not None and originalRecord['id'] not in self.processTweetsIds:
+                self.processTweetsIds = self.processTweetsIds.union({ originalRecord['id'] })
+                insertOriginalRecord = True
+
+        with self.tweetsRecordLocker:
+            if originalRecord is None and insertRecord:
+                self.tweetsRecord.append(record)
+            if originalRecord is not None:
+                if insertRecord:
+                    self.tweetsRecord.append({
+                        'created_at' : tweet['created_at'],
+                        'user_id' : tweet['user']['id'],
+                        'id' : tweet['id'],
+                        'entities' : [ {
+                            'updated_time' : datetime.now(),
+                            'retweet_count' : tweet['retweet_count'],
+                            'favorite_count' : tweet['favorite_count'],
+                        } ],
+                        'retweet_from' : originalRecord['id']
+                    })
+                if insertOriginalRecord:
+                    self.tweetsRecord.append(originalRecord)
+
+    def insertUsersRecord(self, tweet):
+        insertRecord = False
+        insertOriginalRecord = False
+
+        with self.usersRecordsLocker:
+            if tweet['user']['id'] not in self.processUserIds:
+                self.queueUserIds = self.queueUserIds.union({ tweet['user']['id'] })
+                self.processUserIds = self.processUserIds.union({ tweet['user']['id'] })
+                insertRecord = True
+            if 'retweeted_status' in tweet.keys() and tweet['retweeted_status']['user']['id'] not in self.processUserIds:
+                self.queueUserIds = self.queueUserIds.union({ tweet['retweeted_status']['user']['id'] })
+                self.processUserIds = self.processUserIds.union({ tweet['retweeted_status']['user']['id'] })
+                insertOriginalRecord = True
+
+        with self.processUserIdsLocker:
+            if insertRecord:
+                self.usersRecords.append({
+                    'id' : tweet['user']['id'],
+                    'name' : tweet['user']['name'],
+                    'screen_name' : tweet['user']['screen_name'],
+                    'location' : tweet['user']['location'],
+                    'entities' : [ {
+                        'updated_time' : datetime.now(),
+                        'followers_count' : tweet['user']['followers_count'],
+                        'friends_count' : tweet['user']['friends_count'],
+                        'statuses_count' : tweet['user']['statuses_count'],
+                    } ],
+                    'created_at' : parse(tweet['user']['created_at'])
+                })
+
+            if insertOriginalRecord:
+                originalTweet = tweet['retweeted_status']
+                self.usersRecords.append({
+                    'id' : originalTweet['user']['id'],
+                    'name' : originalTweet['user']['name'],
+                    'screen_name' : originalTweet['user']['screen_name'],
+                    'location' : originalTweet['user']['location'],
+                    'entities' : [ {
+                        'updated_time' : datetime.now(),
+                        'followers_count' : originalTweet['user']['followers_count'],
+                        'friends_count' : originalTweet['user']['friends_count'],
+                        'statuses_count' : originalTweet['user']['statuses_count'],
+                    } ],
+                        'created_at' : parse(originalTweet['user']['created_at'])
+                    })
+
     def authenApis(self,fpath):
         config = None
 
@@ -216,103 +324,12 @@ class TwitterCrawler:
                 for tweet in response:
                     tweet = tweet._json
 
-                    originalRecord = None
-
-                    with self.processTweetsIdsLocker:
-                        if tweet['id'] in self.processTweetsIds:
-                            continue
-
-                    if 'retweeted_status' in tweet.keys():
-                        originalTweet = tweet['retweeted_status']
-                        originalRecord = {
-                            'created_at' : parse(originalTweet['created_at']),
-                            'user_id' : originalTweet['user']['id'],
-                            'id' : originalTweet['id'],
-                            'full_text' : originalTweet['full_text'],
-                            'hashtags' : originalTweet['entities']['hashtags'],
-                            'user_mentions' : originalTweet['entities']['user_mentions'],
-                            'entities' : [{
-                                'updated_time' : datetime.now(),
-                                'retweet_count' : originalTweet['retweet_count'],
-                                'favorite_count' : originalTweet['favorite_count'],
-                            }]
-                        }
-
-                    with self.tweetsRecordLocker:
-                        record = {
-                            'created_at' : parse(tweet['created_at']),
-                            'user_id' : tweet['user']['id'],
-                            'id' : tweet['id'],
-                            'full_text' : tweet['full_text'],
-                            'hashtags' : tweet['entities']['hashtags'],
-                            'user_mentions' : tweet['entities']['user_mentions'],
-                            'entities' : [ {
-                                'updated_time' : datetime.now(),
-                                'retweet_count' : tweet['retweet_count'],
-                                'favorite_count' : tweet['favorite_count'],
-                            }]
-                        }
-
-                        with self.processTweetsIdsLocker:
-                            if tweet['id'] not in self.processTweetsIds:
-                                self.processTweetsIds = self.processTweetsIds.union({ tweet['id'] })
-                                if originalRecord is None:
-                                    self.tweetsRecord.append(record)
-                                else:
-                                    self.tweetsRecord.append({
-                                        'created_at' : tweet['created_at'],
-                                        'user_id' : tweet['user']['id'],
-                                        'id' : tweet['id'],
-                                        'entities' : [ {
-                                            'updated_time' : datetime.now(),
-                                            'retweet_count' : tweet['retweet_count'],
-                                            'favorite_count' : tweet['favorite_count'],
-                                        } ],
-                                        'retweet_from' : originalRecord['id']
-                                    })
-                                    if originalRecord['id'] not in self.processTweetsIds:
-                                        self.processTweetsIds = self.processTweetsIds.union({ originalRecord['id'] })
-                                        self.tweetsRecord.append(originalRecord)
+                    self.insertTweetsRecord(tweet)
+                    self.insertUsersRecord(tweet)
 
                     if tweet['id'] < maxId or maxId == -1:
                         isExhaust = False
                         maxId = tweet['id']
-
-                    with self.usersRecordsLocker:
-                        with self.processUserIdsLocker:
-                            if tweet['user']['id'] not in self.processUserIds:
-                                self.queueUserIds = self.queueUserIds.union({ tweet['user']['id'] })
-                                self.processUserIds = self.processUserIds.union({ tweet['user']['id'] })
-                                self.usersRecords.append({
-                                    'id' : tweet['user']['id'],
-                                    'name' : tweet['user']['name'],
-                                    'screen_name' : tweet['user']['screen_name'],
-                                    'location' : tweet['user']['location'],
-                                    'entities' : [ {
-                                        'updated_time' : datetime.now(),
-                                        'followers_count' : tweet['user']['followers_count'],
-                                        'friends_count' : tweet['user']['friends_count'],
-                                        'statuses_count' : tweet['user']['statuses_count'],
-                                    } ],
-                                    'created_at' : parse(tweet['user']['created_at'])
-                                })
-
-                            if 'retweeted_status' in tweet.keys() and tweet['retweeted_status']['user']['id'] not in self.processUserIds:
-                                self.queueUserIds = self.queueUserIds.union({ tweet['retweeted_status']['user']['id'] })
-                                self.processUserIds = self.processUserIds.union({ tweet['retweeted_status']['user']['id'] })
-                                self.usersRecords.append({
-                                    'id' : originalTweet['user']['id'],
-                                    'name' : originalTweet['user']['name'],
-                                    'screen_name' : originalTweet['user']['screen_name'],
-                                    'location' : originalTweet['user']['location'],
-                                    'entities' : [ {
-                                        'updated_time' : datetime.now(),
-                                        'followers_count' : originalTweet['user']['followers_count'],
-                                        'friends_count' : originalTweet['user']['friends_count'],
-                                        'statuses_count' : originalTweet['user']['statuses_count'],
-                                    } ],
-                                    'created_at' : parse(originalTweet['user']['created_at'])
-                                })
 
                 api['searchRequestLeft'] -= 1
 
@@ -344,63 +361,9 @@ class TwitterCrawler:
                 for tweet in response:
                     tweet = tweet._json
 
-                    with self.processTweetsIdsLocker:
-                        if tweet['id'] in self.processTweetsIds:
-                            continue
-
                     originalRecord = None
 
-                    if 'retweeted_status' in tweet.keys():
-                        originalTweet = tweet['retweeted_status']
-                        originalRecord = {
-                            'created_at' : parse(originalTweet['created_at']),
-                            'user_id' : originalTweet['user']['id'],
-                            'id' : originalTweet['id'],
-                            'full_text' : originalTweet['full_text'],
-                            'hashtags' : originalTweet['entities']['hashtags'],
-                            'user_mentions' : originalTweet['entities']['user_mentions'],
-                            'entities' : [ {
-                                'updated_time' : datetime.now(),
-                                'retweet_count' : originalTweet['retweet_count'],
-                                'favorite_count' : originalTweet['favorite_count'],
-                            } ]
-                        }
-
-                    with self.tweetsRecordLocker:
-                        record = {
-                            'created_at' : parse(tweet['created_at']),
-                            'user_id' : tweet['user']['id'],
-                            'id' : tweet['id'],
-                            'full_text' : tweet['full_text'],
-                            'hashtags' : tweet['entities']['hashtags'],
-                            'user_mentions' : tweet['entities']['user_mentions'],
-                            'entities' : [ {
-                                'updated_time' : datetime.now(),
-                                'retweet_count' : tweet['retweet_count'],
-                                'favorite_count' : tweet['favorite_count'],
-                            } ]
-                        }
-
-                        with self.processTweetsIdsLocker:
-                            if tweet['id'] not in self.processTweetsIds:
-                                self.processTweetsIds = self.processTweetsIds.union({ tweet['id'] })
-                                if originalRecord is None:
-                                    self.tweetsRecord.append(record)
-                                else:
-                                    self.tweetsRecord.append({
-                                        'record' : tweet['created_at'],
-                                        'user_id' : tweet['user']['id'],
-                                        'entities' : [ {
-                                            'updated_time' : datetime.now(),
-                                            'retweet_count' : tweet['retweet_count'],
-                                            'favorite_count' : tweet['favorite_count'],
-                                        }],
-                                        'retweet_from' : originalRecord['id']
-                                    })
-                                    if originalRecord['id'] not in self.processTweetsIds:
-                                        self.tweetsRecord.append(originalRecord)
-                                        self.processTweetsIds = self.processTweetsIds.union({ originalRecord['id'] })
-
+                    self.insertTweetsRecord(tweet)
 
                     if tweet['id'] < maxId or maxId == -1:
                         maxId = tweet['id']
