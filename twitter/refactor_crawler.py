@@ -70,7 +70,6 @@ class TwitterCrawler:
         db = self.connect()
 
         with self.tweetsRecordLocker:
-            logging.info(f'{threading.get_ident()} lock tweetsRecordLocker')
             deleteRecord = list()
             for i in range(len(self.tweetsRecord)):
                 record = self.tweetsRecord[i]
@@ -87,7 +86,6 @@ class TwitterCrawler:
             self.tweetsRecord.clear()
 
         with self.usersRecordsLocker:
-            logging.info(f'{threading.get_ident()} lock usersRecordsLocker')
             deleteRecord = list()
             for i in range(len(self.usersRecords)):
                 record = self.usersRecords[i]
@@ -100,7 +98,6 @@ class TwitterCrawler:
             self.usersRecords = [ self.usersRecords[i] for i in range(len(self.usersRecords)) if i not in deleteRecord ]
             db.rawUsers.insert_many(self.usersRecords)
             self.usersRecords.clear()
-            logging.info(f'{threading.get_ident()} unlock usersRecordsLocker')
 
         rawTweetsCount = db.rawTweets.count_documents({})
         rawUsersCount = db.rawUsers.count_documents({})
@@ -195,17 +192,14 @@ class TwitterCrawler:
         insertRecord = False
         insertOriginalRecord = False
         with self.processTweetsIdsLocker:
-            logging.info(f'{threading.get_ident()} lock processTweetsIdsLocker')
             if tweet['id'] not in self.processTweetsIds:
                 self.processTweetsIds = self.processTweetsIds.union({ tweet['id'] })
                 insertRecord = True
             if originalRecord is not None and originalRecord['id'] not in self.processTweetsIds:
                 self.processTweetsIds = self.processTweetsIds.union({ originalRecord['id'] })
                 insertOriginalRecord = True
-            logging.info(f'{threading.get_ident()} unlock processTweetsIdsLocker')
 
         with self.tweetsRecordLocker:
-            logging.info(f'{threading.get_ident()} lock tweetsRecordLocker')
             if originalRecord is None and insertRecord:
                 self.tweetsRecord.append(record)
             if originalRecord is not None:
@@ -223,14 +217,12 @@ class TwitterCrawler:
                     })
                 if insertOriginalRecord:
                     self.tweetsRecord.append(originalRecord)
-            logging.info(f'{threading.get_ident()} unlock tweetsRecordLocker')
 
     def insertUsersRecord(self, tweet):
         insertRecord = False
         insertOriginalRecord = False
 
         with self.usersRecordsLocker:
-            logging.info(f'{threading.get_ident()} lock usersRecordsLocker')
             if tweet['user']['id'] not in self.processUserIds:
                 self.queueUserIds = self.queueUserIds.union({ tweet['user']['id'] })
                 self.processUserIds = self.processUserIds.union({ tweet['user']['id'] })
@@ -239,10 +231,8 @@ class TwitterCrawler:
                 self.queueUserIds = self.queueUserIds.union({ tweet['retweeted_status']['user']['id'] })
                 self.processUserIds = self.processUserIds.union({ tweet['retweeted_status']['user']['id'] })
                 insertOriginalRecord = True
-            logging.info(f'{threading.get_ident()} unlock usersRecordsLocker')
 
         with self.processUserIdsLocker:
-            logging.info(f'{threading.get_ident()} lock processUserIdsLocker')
             if insertRecord:
                 self.usersRecords.append({
                     'id' : tweet['user']['id'],
@@ -273,7 +263,6 @@ class TwitterCrawler:
                     } ],
                         'created_at' : parse(originalTweet['user']['created_at'])
                     })
-            logging.info(f'{threading.get_ident()} unlock processUserIdsLocker')
 
     def authenApis(self,fpath):
         config = None
@@ -320,6 +309,7 @@ class TwitterCrawler:
         api['userTimelineResetTime'] = timeline['reset']
 
     def searchTweet(self,mention,api, maxId = -1):
+        logging.info(f'{threading.get_ident()} start search tweet {mention}')
         api['searchTweetLock'] = True
         tweets = list()
         users = list()
@@ -355,8 +345,10 @@ class TwitterCrawler:
             self.createTasks(function='searchTweet', maxId=maxId, mention=mention)
 
         api['searchTweetLock'] = False
+        logging.info(f'{threading.get_ident()} finish search tweet {mention}')
 
     def retrieveTimelineStatus(self,userId, api, maxId=-1):
+        logging.info(f'{threading.get_ident()} retrieveTimelineStatus {userId}')
         api['userTimelineLock'] = True
         isExhaust = False
 
@@ -391,8 +383,10 @@ class TwitterCrawler:
         if not isExhaust:
             self.createTasks(userId=userId, maxId=maxId, function='retrieveTimelineStatus')
         api['userTimelineLock'] = False
+        logging.info(f'{threading.get_ident()} finish retrieveTimelineStatus {userId}')
 
     def followerList(self, userId, api, cursor=-1):
+        logging.info(f'{threading.get_ident()} followerList {userId}')
         api['followerLock'] = True
         try:
             while cursor != 0 and api['followerRequestLeft'] > 0:
@@ -402,19 +396,14 @@ class TwitterCrawler:
                     user = user._json
 
                     with self.processUserIdsLocker:
-                        logging.info(f'{threading.get_ident()} lock processUserIdsLocker')
                         if user['id'] in self.processUserIds:
                             continue
                         self.processUserIds = self.processUserIds.union({ user['id'] })
-                        logging.info(f'{threading.get_ident()} unlock processUserIdsLocker')
 
                     with self.queueUserIdsLocker:
-                        logging.info(f'{threading.get_ident()} lock queueUserIdsLocker')
                         self.queueUserIds = self.queueUserIds.union({user['id']})
-                        logging.info(f'{threading.get_ident()} unlock queueUserIdsLocker')
 
                     with self.usersRecordsLocker:
-                        logging.info(f'{threading.get_ident()} lock usersRecordsLocker')
                         self.usersRecords.append({
                             'id' : user['id'],
                             'name' : user['name'],
@@ -431,7 +420,6 @@ class TwitterCrawler:
                                 } 
                             ]
                         })
-                        logging.info(f'{threading.get_ident()} unlock usersRecordsLocker')
 
                 cursor = response[1][1]
         except tweepy.RateLimitError:
@@ -442,6 +430,7 @@ class TwitterCrawler:
         if cursor != 0:
             self.createTasks(userId=userId, cursor=cursor,function='followerList')
         api['followerLock'] = False
+        logging.info(f'{threading.get_ident()} finish followerList {userId}')
 
     def initTask(self):
         for name in screenNames:
