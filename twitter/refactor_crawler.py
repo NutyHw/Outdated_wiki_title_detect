@@ -273,7 +273,7 @@ class TwitterCrawler:
                     } ],
                         'created_at' : parse(originalTweet['user']['created_at'])
                     })
-            logging.info(f'{threading.get_ident()} unlock usersRecordsLocker')
+            logging.info(f'{threading.get_ident()} unlock processUserIdsLocker')
 
     def authenApis(self,fpath):
         config = None
@@ -431,7 +431,7 @@ class TwitterCrawler:
                                 } 
                             ]
                         })
-                        logging.info(f'{threading.get_ident()} lock usersRecordsLocker')
+                        logging.info(f'{threading.get_ident()} unlock usersRecordsLocker')
 
                 cursor = response[1][1]
         except tweepy.RateLimitError:
