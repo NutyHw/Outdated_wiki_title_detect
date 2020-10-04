@@ -70,6 +70,8 @@ class TwitterCrawler:
             deleteRecord = list()
             for i in range(len(self.tweetsRecord)):
                 record = self.tweetsRecord[i]
+                if 'id' not in record.keys():
+                    print(record.keys())
                 result = db.rawTweets.update_one(
                     { 'id' : record['id'] },
                     { '$push' : { 'entities' : record['entities'][0] }}
@@ -94,8 +96,8 @@ class TwitterCrawler:
             db.rawUsers.insert_many(self.usersRecords)
             self.usersRecords.clear()
 
-        rawTweetsCount = db.rawTweets.count_documents()
-        rawUsersCount = db.rawUsers.count_documents()
+        rawTweetsCount = db.rawTweets.count_documents({})
+        rawUsersCount = db.rawUsers.count_documents({})
         with open('crawler.log','a') as f:
             f.writelines(f'Tweets count {rawTweetsCount}, Users count {rawUsersCount}\n')
 
@@ -258,7 +260,7 @@ class TwitterCrawler:
                                     self.tweetsRecord.append(record)
                                 else:
                                     self.tweetsRecord.append({
-                                        'record' : tweet['created_at'],
+                                        'created_at' : tweet['created_at'],
                                         'user_id' : tweet['user']['id'],
                                         'id' : tweet['id'],
                                         'entities' : [ {
@@ -478,7 +480,6 @@ class TwitterCrawler:
         while datetime.now() < runUntil:
             deleteTask = list()
 
-
             with self.queueUserIdsLocker:
                 for userId in self.queueUserIds:
                     self.createTasks(function='followerList', cursor=-1, userId=userId)
@@ -495,7 +496,7 @@ class TwitterCrawler:
                         thread.join()
                     allThreds.clear()
 
-                if lastSave + timedelta(hours=1) < datetime.now():
+                if lastSave + timedelta(minutes=3) < datetime.now():
                     thread = threading.Thread(target=self.saveState)
                     thread.start()
                     allThreds.append(thread)
