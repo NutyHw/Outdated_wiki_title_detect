@@ -464,7 +464,7 @@ class TwitterCrawler:
                 if threading.activeCount() > self.threadThreshold:
                     continue
 
-                if lastSave + timedelta(minutes=3) < datetime.now():
+                if lastSave + timedelta(hours=1) < datetime.now():
                     thread = threading.Thread(target=self.saveState)
                     thread.start()
                     lastSave = datetime.now()
