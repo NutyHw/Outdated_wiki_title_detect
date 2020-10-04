@@ -5,11 +5,14 @@ from pymongo import MongoClient
 from dotenv import load_dotenv
 import os
 import threading
+import logging
 from copy import deepcopy
 from dateutil.parser import parse
 from bson.objectid import ObjectId
 
 load_dotenv(dotenv_path='../config/crawler.env')
+
+logging.basicConfig(filename='crawler.log', format='%(asctime)s  %(name)s %(levelname)s: %(message)s', filemode='w', level=logging.INFO)
 
 class TwitterCrawler:
     def __init__(self, mode, threshold):
@@ -67,6 +70,7 @@ class TwitterCrawler:
         db = self.connect()
 
         with self.tweetsRecordLocker:
+            logging.info(f'{threading.get_ident()} lock tweetsRecordLocker')
             deleteRecord = list()
             for i in range(len(self.tweetsRecord)):
                 record = self.tweetsRecord[i]
@@ -83,6 +87,7 @@ class TwitterCrawler:
             self.tweetsRecord.clear()
 
         with self.usersRecordsLocker:
+            logging.info(f'{threading.get_ident()} lock usersRecordsLocker')
             deleteRecord = list()
             for i in range(len(self.usersRecords)):
                 record = self.usersRecords[i]
@@ -95,11 +100,11 @@ class TwitterCrawler:
             self.usersRecords = [ self.usersRecords[i] for i in range(len(self.usersRecords)) if i not in deleteRecord ]
             db.rawUsers.insert_many(self.usersRecords)
             self.usersRecords.clear()
+            logging.info(f'{threading.get_ident()} unlock usersRecordsLocker')
 
         rawTweetsCount = db.rawTweets.count_documents({})
         rawUsersCount = db.rawUsers.count_documents({})
-        with open('crawler.log','a') as f:
-            f.writelines(f'Tweets count {rawTweetsCount}, Users count {rawUsersCount}\n')
+        logging.info(f'Tweets count {rawTweetsCount}, Users count {rawUsersCount}\n')
 
     def saveTask(self):
         db = self.connect()
@@ -190,14 +195,17 @@ class TwitterCrawler:
         insertRecord = False
         insertOriginalRecord = False
         with self.processTweetsIdsLocker:
+            logging.info(f'{threading.get_ident()} lock processTweetsIdsLocker')
             if tweet['id'] not in self.processTweetsIds:
                 self.processTweetsIds = self.processTweetsIds.union({ tweet['id'] })
                 insertRecord = True
             if originalRecord is not None and originalRecord['id'] not in self.processTweetsIds:
                 self.processTweetsIds = self.processTweetsIds.union({ originalRecord['id'] })
                 insertOriginalRecord = True
+            logging.info(f'{threading.get_ident()} unlock processTweetsIdsLocker')
 
         with self.tweetsRecordLocker:
+            logging.info(f'{threading.get_ident()} lock tweetsRecordLocker')
             if originalRecord is None and insertRecord:
                 self.tweetsRecord.append(record)
             if originalRecord is not None:
@@ -215,12 +223,14 @@ class TwitterCrawler:
                     })
                 if insertOriginalRecord:
                     self.tweetsRecord.append(originalRecord)
+            logging.info(f'{threading.get_ident()} unlock tweetsRecordLocker')
 
     def insertUsersRecord(self, tweet):
         insertRecord = False
         insertOriginalRecord = False
 
         with self.usersRecordsLocker:
+            logging.info(f'{threading.get_ident()} lock usersRecordsLocker')
             if tweet['user']['id'] not in self.processUserIds:
                 self.queueUserIds = self.queueUserIds.union({ tweet['user']['id'] })
                 self.processUserIds = self.processUserIds.union({ tweet['user']['id'] })
@@ -229,8 +239,10 @@ class TwitterCrawler:
                 self.queueUserIds = self.queueUserIds.union({ tweet['retweeted_status']['user']['id'] })
                 self.processUserIds = self.processUserIds.union({ tweet['retweeted_status']['user']['id'] })
                 insertOriginalRecord = True
+            logging.info(f'{threading.get_ident()} unlock usersRecordsLocker')
 
         with self.processUserIdsLocker:
+            logging.info(f'{threading.get_ident()} lock processUserIdsLocker')
             if insertRecord:
                 self.usersRecords.append({
                     'id' : tweet['user']['id'],
@@ -261,6 +273,7 @@ class TwitterCrawler:
                     } ],
                         'created_at' : parse(originalTweet['user']['created_at'])
                     })
+            logging.info(f'{threading.get_ident()} unlock usersRecordsLocker')
 
     def authenApis(self,fpath):
         config = None
@@ -389,14 +402,19 @@ class TwitterCrawler:
                     user = user._json
 
                     with self.processUserIdsLocker:
+                        logging.info(f'{threading.get_ident()} lock processUserIdsLocker')
                         if user['id'] in self.processUserIds:
                             continue
                         self.processUserIds = self.processUserIds.union({ user['id'] })
+                        logging.info(f'{threading.get_ident()} unlock processUserIdsLocker')
 
                     with self.queueUserIdsLocker:
+                        logging.info(f'{threading.get_ident()} lock queueUserIdsLocker')
                         self.queueUserIds = self.queueUserIds.union({user['id']})
+                        logging.info(f'{threading.get_ident()} unlock queueUserIdsLocker')
 
                     with self.usersRecordsLocker:
+                        logging.info(f'{threading.get_ident()} lock usersRecordsLocker')
                         self.usersRecords.append({
                             'id' : user['id'],
                             'name' : user['name'],
@@ -413,6 +431,7 @@ class TwitterCrawler:
                                 } 
                             ]
                         })
+                        logging.info(f'{threading.get_ident()} lock usersRecordsLocker')
 
                 cursor = response[1][1]
         except tweepy.RateLimitError:
@@ -439,7 +458,6 @@ class TwitterCrawler:
         lastSave = datetime.now()
         runUntil = datetime.now() + timedelta(hours=12)
 
-        allThreds = list()
         while datetime.now() < runUntil:
             deleteTask = list()
 
@@ -455,14 +473,11 @@ class TwitterCrawler:
             for i in range(len(self.taskQueue)):
                 task = deepcopy(self.taskQueue[i])
                 if threading.activeCount() > self.threadThreshold:
-                    for thread in allThreds:
-                        thread.join()
-                    allThreds.clear()
+                    continue
 
                 if lastSave + timedelta(minutes=3) < datetime.now():
                     thread = threading.Thread(target=self.saveState)
                     thread.start()
-                    allThreds.append(thread)
                     lastSave = datetime.now()
 
                 if lastCheckRatelimit + timedelta(minutes=5) < datetime.now():
@@ -473,14 +488,12 @@ class TwitterCrawler:
                 if len(self.taskPool) > 10000:
                     self.saveTask()
 
-
                 for api in self.apis:
                     if task['function'] == 'searchTweet' and not api['searchTweetLock']:
                         if api['searchRequestLeft'] > 0:
                             task['kwargs']['api'] = api
                             thread = threading.Thread(target=self.searchTweet, kwargs=task['kwargs'])
                             thread.start()
-                            allThreds.append(thread)
                             deleteTask.append(self.taskQueue[i])
                             break
 
@@ -509,5 +522,5 @@ if __name__ == '__main__':
     screenNames = list()
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
-    crawler = TwitterCrawler(mode='start', threshold=8)
+    crawler = TwitterCrawler(mode='start', threshold=4)
     crawler.run()
