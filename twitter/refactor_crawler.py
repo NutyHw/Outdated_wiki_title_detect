@@ -28,33 +28,12 @@ def saveState(tweetsRecord, usersRecords):
     db = client[os.getenv('authSource')]
 
     deleteRecord = list()
-    for i in range(len(tweetsRecord)):
-        record = tweetsRecord[i]
-        result = db.rawTweets.update_one(
-            { 'id' : record['id'] },
-            { '$push' : { 'entities' : record['entities'][0] }}
-        )
-        if result.matched_count > 0:
-            deleteRecord.append(i)
-    tweetsRecord = [ tweetsRecord[i] for i in range(len(tweetsRecord)) if i not in deleteRecord ]
     db.rawTweets.insert_many(tweetsRecord)
-
-    with usersRecordsLocker:
-        deleteRecord = list()
-        for i in range(len(usersRecords)):
-            record = usersRecords[i]
-            result = db.rawUsers.update_one(
-                { 'id' : record['id'] },
-                { '$push' : { 'entities' : record['entities'][0] }}
-            )
-            if result.matched_count > 0:
-                deleteRecord.append(i)
-        usersRecords = [ usersRecords[i] for i in range(len(usersRecords)) if i not in deleteRecord ]
-        db.rawUsers.insert_many(usersRecords)
+    db.rawUsers.insert_many(usersRecords)
 
     rawTweetsCount = db.rawTweets.count_documents({})
     rawUsersCount = db.rawUsers.count_documents({})
-    logging.info(f'Tweets count {rawTweetsCount}, Users count {rawUsersCount}\n')
+    logging.info(f'Tweets count {rawTweetsCount}, Users count {rawUsersCount}')
 
 class TwitterCrawler:
     def __init__(self, mode, threshold):
@@ -125,7 +104,7 @@ class TwitterCrawler:
                 break
             self.taskQueue.append(record)
 
-        #db.taskPool.delete_many({ '_id' : { '$in' : [ ObjectId(task['_id']) for task in self.taskQueue ] } })
+        db.taskPool.delete_many({ '_id' : { '$in' : [ ObjectId(task['_id']) for task in self.taskQueue ] } })
 
         if len(self.taskQueue) < 10000:
             if len(self.taskPool) < 10000:
@@ -521,5 +500,5 @@ if __name__ == '__main__':
     screenNames = list()
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
-    crawler = TwitterCrawler(mode='continue', threshold=4)
+    crawler = TwitterCrawler(mode='continue', threshold=8)
     crawler.run()
