@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import os
 import threading
 import logging
+from multiprocessing import Process
 from copy import deepcopy
 from dateutil.parser import parse
 from bson.objectid import ObjectId
@@ -13,6 +14,47 @@ from bson.objectid import ObjectId
 load_dotenv(dotenv_path='../config/crawler.env')
 
 logging.basicConfig(filename='crawler.log', format='%(asctime)s  %(name)s %(levelname)s: %(message)s', filemode='w', level=logging.INFO)
+
+def saveState(tweetsRecord, usersRecords):
+    client = MongoClient(
+        host=os.getenv('host'),
+        port=int(os.getenv('port')),
+        username=os.getenv('username'),
+        password=os.getenv('password'),
+        authSource=os.getenv('authSource'),
+        authMechanism=os.getenv('authMechanism')
+    )
+
+    db = client[os.getenv('authSource')]
+
+    deleteRecord = list()
+    for i in range(len(tweetsRecord)):
+        record = tweetsRecord[i]
+        result = db.rawTweets.update_one(
+            { 'id' : record['id'] },
+            { '$push' : { 'entities' : record['entities'][0] }}
+        )
+        if result.matched_count > 0:
+            deleteRecord.append(i)
+    tweetsRecord = [ tweetsRecord[i] for i in range(len(tweetsRecord)) if i not in deleteRecord ]
+    db.rawTweets.insert_many(tweetsRecord)
+
+    with usersRecordsLocker:
+        deleteRecord = list()
+        for i in range(len(usersRecords)):
+            record = usersRecords[i]
+            result = db.rawUsers.update_one(
+                { 'id' : record['id'] },
+                { '$push' : { 'entities' : record['entities'][0] }}
+            )
+            if result.matched_count > 0:
+                deleteRecord.append(i)
+        usersRecords = [ usersRecords[i] for i in range(len(usersRecords)) if i not in deleteRecord ]
+        db.rawUsers.insert_many(usersRecords)
+
+    rawTweetsCount = db.rawTweets.count_documents({})
+    rawUsersCount = db.rawUsers.count_documents({})
+    logging.info(f'Tweets count {rawTweetsCount}, Users count {rawUsersCount}\n')
 
 class TwitterCrawler:
     def __init__(self, mode, threshold):
@@ -66,42 +108,6 @@ class TwitterCrawler:
         db = self.connect()
         db.drop_collection('taskPool')
 
-    def saveState(self):
-        db = self.connect()
-
-        with self.tweetsRecordLocker:
-            deleteRecord = list()
-            for i in range(len(self.tweetsRecord)):
-                record = self.tweetsRecord[i]
-                if 'id' not in record.keys():
-                    print(record.keys())
-                result = db.rawTweets.update_one(
-                    { 'id' : record['id'] },
-                    { '$push' : { 'entities' : record['entities'][0] }}
-                )
-                if result.matched_count > 0:
-                    deleteRecord.append(i)
-            self.tweetsRecord = [ self.tweetsRecord[i] for i in range(len(self.tweetsRecord)) if i not in deleteRecord ]
-            db.rawTweets.insert_many(self.tweetsRecord)
-            self.tweetsRecord.clear()
-
-        with self.usersRecordsLocker:
-            deleteRecord = list()
-            for i in range(len(self.usersRecords)):
-                record = self.usersRecords[i]
-                result = db.rawUsers.update_one(
-                    { 'id' : record['id'] },
-                    { '$push' : { 'entities' : record['entities'][0] }}
-                )
-                if result.matched_count > 0:
-                    deleteRecord.append(i)
-            self.usersRecords = [ self.usersRecords[i] for i in range(len(self.usersRecords)) if i not in deleteRecord ]
-            db.rawUsers.insert_many(self.usersRecords)
-            self.usersRecords.clear()
-
-        rawTweetsCount = db.rawTweets.count_documents({})
-        rawUsersCount = db.rawUsers.count_documents({})
-        logging.info(f'Tweets count {rawTweetsCount}, Users count {rawUsersCount}\n')
 
     def saveTask(self):
         db = self.connect()
@@ -119,7 +125,7 @@ class TwitterCrawler:
                 break
             self.taskQueue.append(record)
 
-        db.taskPool.delete_many({ '_id' : { '$in' : [ ObjectId(task['_id']) for task in self.taskQueue ] } })
+        #db.taskPool.delete_many({ '_id' : { '$in' : [ ObjectId(task['_id']) for task in self.taskQueue ] } })
 
         if len(self.taskQueue) < 10000:
             if len(self.taskPool) < 10000:
@@ -465,8 +471,12 @@ class TwitterCrawler:
                     continue
 
                 if lastSave + timedelta(hours=1) < datetime.now():
-                    thread = threading.Thread(target=self.saveState)
-                    thread.start()
+                    with self.tweetsRecordLocker:
+                        with self.usersRecordsLocker:
+                            p = Process(target=saveState, args=(deepcopy(self.tweetsRecord),deepcopy(self.usersRecords),))
+                            p.start()
+                            self.usersRecords.clear()
+                            self.tweetsRecord.clear()
                     lastSave = datetime.now()
 
                 if lastCheckRatelimit + timedelta(minutes=5) < datetime.now():
@@ -511,5 +521,5 @@ if __name__ == '__main__':
     screenNames = list()
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
-    crawler = TwitterCrawler(mode='start', threshold=4)
+    crawler = TwitterCrawler(mode='continue', threshold=4)
     crawler.run()
