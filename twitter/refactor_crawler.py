@@ -7,7 +7,6 @@ import os
 import threading
 import logging
 from multiprocessing import Process
-from copy import deepcopy
 from dateutil.parser import parse
 from bson.objectid import ObjectId
 
@@ -26,7 +25,7 @@ def saveState(tweetsRecord, usersRecords):
     )
 
     db = client[os.getenv('authSource')]
-    db.processTweets.bulk_write([
+    db.testTweets.bulk_write([
         UpdateOne(
             { 
                 'id' : record['id'],
@@ -44,13 +43,12 @@ def saveState(tweetsRecord, usersRecords):
         for record in tweetsRecord if 'full_text' in record.keys()
     ])
 
-    db.processTweets.bulk_write([
+    db.testTweets.bulk_write([
         UpdateOne(
             { 
                 'id' : record['id'],
                 'created_at' : record['created_at'],
                 'user_id' : record['user_id'],
-                'user_mentions' : record['user_mentions'],
                 'retweet_from' : record['retweet_from']
             },
             {
@@ -61,7 +59,7 @@ def saveState(tweetsRecord, usersRecords):
         for record in tweetsRecord if 'retweet_from' in record.keys()
     ])
 
-    db.processUsers.bulk_write([
+    db.testUsers.bulk_write([
         UpdateOne(
             { 
                 'id' : record['id'],
@@ -154,10 +152,10 @@ class TwitterCrawler:
 
         if len(self.taskQueue) < 10000:
             if len(self.taskPool) < 10000:
-                self.taskQueue = deepcopy(self.taskPool)
+                self.taskQueue = list(self.taskPool)
                 self.taskPool.clear()
             else:
-                self.taskQueue = deepcopy(self.taskPool[:10000])
+                self.taskQueue = list(self.taskPool[:10000])
                 self.taskPool = self.taskPool[10000:]
 
 
@@ -489,14 +487,14 @@ class TwitterCrawler:
                 self.loadTask()
 
             for i in range(len(self.taskQueue)):
-                task = deepcopy(self.taskQueue[i])
+                task = dict(self.taskQueue[i])
                 if threading.activeCount() > self.threadThreshold:
                     continue
 
-                if lastSave + timedelta(hours=1) < datetime.now():
+                if lastSave + timedelta(minutes=3) < datetime.now():
                     with self.tweetsRecordLocker:
                         with self.usersRecordsLocker:
-                            p = Process(target=saveState, args=(deepcopy(self.tweetsRecord),deepcopy(self.usersRecords),))
+                            p = Process(target=saveState, args=(list(self.tweetsRecord),list(self.usersRecords),))
                             p.start()
                             self.usersRecords.clear()
                             self.tweetsRecord.clear()
@@ -544,5 +542,5 @@ if __name__ == '__main__':
     screenNames = list()
     with open('../data/twitter_seed.txt') as f:
         screenNames = f.read().splitlines()
-    crawler = TwitterCrawler(mode='continue', threshold=8)
+    crawler = TwitterCrawler(mode='start', threshold=4)
     crawler.run()
