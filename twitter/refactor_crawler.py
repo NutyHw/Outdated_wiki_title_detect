@@ -1,7 +1,7 @@
 import tweepy
 from datetime import datetime, timedelta
 import json
-from pymongo import MongoClient
+from pymongo import MongoClient, UpdateOne
 from dotenv import load_dotenv
 import os
 import threading
@@ -26,13 +26,60 @@ def saveState(tweetsRecord, usersRecords):
     )
 
     db = client[os.getenv('authSource')]
+    db.processTweets.bulk_write([
+        UpdateOne(
+            { 
+                'id' : record['id'],
+                'created_at' : record['created_at'],
+                'user_id' : record['user_id'],
+                'full_text' : record['full_text'],
+                'hashtags' : record['hashtags'],
+                'user_mentions' : record['user_mentions']
+            },
+            {
+                '$push' : { 'entities' : record['entities'] }
+            },
+            upsert=True
+       )
+        for record in tweetsRecord if 'full_text' in record.keys()
+    ])
 
-    deleteRecord = list()
-    db.rawTweets.insert_many(tweetsRecord)
-    db.rawUsers.insert_many(usersRecords)
+    db.processTweets.bulk_write([
+        UpdateOne(
+            { 
+                'id' : record['id'],
+                'created_at' : record['created_at'],
+                'user_id' : record['user_id'],
+                'user_mentions' : record['user_mentions'],
+                'entities' : record['entities'],
+                'retweet_from' : record['retweet_from']
+            },
+            {
+                '$push' : { 'entities' : record['entities'] }
+            },
+            upsert=True
+       )
+        for record in tweetsRecord if 'retweet_from' in record.keys()
+    ])
 
-    rawTweetsCount = db.rawTweets.count_documents({})
-    rawUsersCount = db.rawUsers.count_documents({})
+    db.processUsers.bulk_write([
+        UpdateOne(
+            { 
+                'id' : record['id'],
+                'name' : record['name'],
+                'screen_name' : record['screen_name'],
+                'location' : record['location']
+            },
+            {
+                '$push' : { 'entities' : record['entities'] }
+            },
+            upsert=True
+       )
+        for record in usersRecords
+    ])
+
+    rawTweetsCount = db.processTweets.count_documents({})
+    rawUsersCount = db.processUsers.count_documents({})
     logging.info(f'Tweets count {rawTweetsCount}, Users count {rawUsersCount}')
 
 class TwitterCrawler:
@@ -193,11 +240,11 @@ class TwitterCrawler:
                         'created_at' : tweet['created_at'],
                         'user_id' : tweet['user']['id'],
                         'id' : tweet['id'],
-                        'entities' : [ {
+                        'entities' : {
                             'updated_time' : datetime.now(),
                             'retweet_count' : tweet['retweet_count'],
                             'favorite_count' : tweet['favorite_count'],
-                        } ],
+                        } ,
                         'retweet_from' : originalRecord['id']
                     })
                 if insertOriginalRecord:
@@ -224,12 +271,12 @@ class TwitterCrawler:
                     'name' : tweet['user']['name'],
                     'screen_name' : tweet['user']['screen_name'],
                     'location' : tweet['user']['location'],
-                    'entities' : [ {
+                    'entities' :  {
                         'updated_time' : datetime.now(),
                         'followers_count' : tweet['user']['followers_count'],
                         'friends_count' : tweet['user']['friends_count'],
                         'statuses_count' : tweet['user']['statuses_count'],
-                    } ],
+                    } ,
                     'created_at' : parse(tweet['user']['created_at'])
                 })
 
@@ -396,14 +443,12 @@ class TwitterCrawler:
                             'location' : user['location'],
                             'followers_count' : user['followers_count'],
                             'follow' : userId,
-                            'entities' : [
-                                {
+                            'entities' :  {
                                     'updated_time' : datetime.now(),
                                     'followers_count' : user['followers_count'],
                                     'friends_count' : user['friends_count'],
                                     'statuses_count' : user['statuses_count']
-                                } 
-                            ]
+                                }
                         })
 
                 cursor = response[1][1]
