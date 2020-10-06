@@ -51,7 +51,6 @@ def saveState(tweetsRecord, usersRecords):
                 'created_at' : record['created_at'],
                 'user_id' : record['user_id'],
                 'user_mentions' : record['user_mentions'],
-                'entities' : record['entities'],
                 'retweet_from' : record['retweet_from']
             },
             {
