@@ -28,7 +28,7 @@ def processRawTweets(db):
             '_id' : { 'id' : '$id' },
             'id' : { '$first' : '$id' },
             'created_at' : { '$first' : '$created_at' },
-            'user_id' : { '$first' : 'user_id' },
+            'user_id' : { '$first' : '$user_id' },
             'full_text' : { '$first' : '$full_text' },
             'hashtags' : { '$first' : '$hashtags' },
             'user_mentions' : { '$first' : '$user_mentions' },
@@ -47,10 +47,10 @@ def processRawTweets(db):
             '_id' : { 'id' : '$id' },
             'id' : { '$first' : '$id' },
             'created_at' : { '$first' : '$created_at' },
-            'user_id' : { '$first' : 'user_id' },
+            'user_id' : { '$first' : '$user_id' },
             'user_mentions' : { '$first' : '$user_mentions' },
             'entities' : { '$push' : '$entities' },
-            'retweet_from' : { 'first' : '$retweet_from' }
+            'retweet_from' : { '$first' : '$retweet_from' }
         }},
         { '$project' : {
             '_id' : 0
