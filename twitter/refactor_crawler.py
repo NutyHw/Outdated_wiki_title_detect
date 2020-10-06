@@ -127,11 +127,6 @@ class TwitterCrawler:
         db = client[os.getenv('authSource')]
         return db
 
-    def loadState(self):
-        db = self.connect()
-        db.drop_collection('taskPool')
-
-
     def saveTask(self):
         db = self.connect()
 
@@ -157,7 +152,6 @@ class TwitterCrawler:
             else:
                 self.taskQueue = list(self.taskPool[:10000])
                 self.taskPool = self.taskPool[10000:]
-
 
     def createTasks(self,**kwargs):
         with self.taskPoolLocker:
